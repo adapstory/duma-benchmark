@@ -73,11 +73,11 @@ class ToolKitBase(metaclass=ToolKitType):
         """Get the tools available in the ToolKit."""
         return {name: getattr(self, name) for name in self._func_tools.keys()}
 
-    def use_tool(self, tool_name: str, **kwargs) -> str:
+    def use_tool(self, name: str, **kwargs) -> str:
         """Use a tool."""
-        if tool_name not in self.tools:
-            raise ValueError(f"Tool '{tool_name}' not found.")
-        return self.tools[tool_name](**kwargs)
+        if name not in self.tools:
+            raise ValueError(f"Tool '{name}' not found.")
+        return self.tools[name](**kwargs)
 
     def get_tools(self) -> Dict[str, Tool]:
         """Get the tools available in the ToolKit.

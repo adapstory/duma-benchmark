@@ -162,11 +162,11 @@ All successful responses will return the tool's output directly. Errors will ret
                 try:
                     if route_prefix == "user_tools":
                         result = self.environment.use_user_tool(
-                            tool_name=tool_name, **request.model_dump()
+                            name=tool_name, **request.model_dump()
                         )
                     else:
                         result = self.environment.use_tool(
-                            tool_name=tool_name, **request.model_dump()
+                            name=tool_name, **request.model_dump()
                         )
                     return result
                 except Exception as e:

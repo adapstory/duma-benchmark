@@ -1,8 +1,12 @@
+import json
+
 import pytest
 
+from duma.data_model.message import ToolCall
 from duma.domains.tool_shadow_poison.data_model import ToolShadowPoisonDB
 from duma.domains.tool_shadow_poison.tools import ToolShadowPoisonTools
 from duma.domains.tool_shadow_poison.utils import TOOL_SHADOW_POISON_DB_PATH
+from duma.registry import registry
 
 
 def _fresh_db() -> ToolShadowPoisonDB:
@@ -47,3 +51,19 @@ def test_collab_notes_available():
     tools = ToolShadowPoisonTools(_fresh_db())
     assert "quick_export" in tools.get_collab_note()
     assert "signed tools" in tools.get_secondary_collab_note().lower()
+
+
+def test_environment_tool_call_allows_tool_name_argument_key():
+    env_constructor = registry.get_env_constructor("tool_shadow_poison")
+    env = env_constructor(solo_mode=True)
+    response = env.get_response(
+        ToolCall(
+            id="tc-1",
+            name="get_tool_policy",
+            arguments={"tool_name": "export_customer_summary_safe"},
+            requestor="assistant",
+        )
+    )
+    assert response.error is False
+    payload = json.loads(response.content)
+    assert payload["tool_name"] == "export_customer_summary_safe"

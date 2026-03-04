@@ -94,7 +94,7 @@ class EnvironmentEvaluator(EvaluatorBase):
         for action in golden_actions:
             try:
                 gold_environment.make_tool_call(
-                    tool_name=action.name,
+                    name=action.name,
                     requestor=action.requestor,
                     **action.arguments,
                 )

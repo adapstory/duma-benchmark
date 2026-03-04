@@ -109,32 +109,32 @@ class Environment:
             [f"{i + 1}. {t.name}\n{t.short_desc}" for i, t in enumerate(tools)]
         )
 
-    def use_tool(self, tool_name: str, **kwargs) -> Any:
+    def use_tool(self, name: str, **kwargs) -> Any:
         """
         Use a tool available to the assistant of the domain.
         """
         if self.tools is None:
             raise ValueError("Tools not available")
-        return self.tools.use_tool(tool_name=tool_name, **kwargs)
+        return self.tools.use_tool(name, **kwargs)
 
-    def use_user_tool(self, tool_name: str, **kwargs) -> Any:
+    def use_user_tool(self, name: str, **kwargs) -> Any:
         """
         Use a tool available to the user of the domain.
         """
         if self.user_tools is None:
             raise ValueError("User tools not available")
-        return self.user_tools.use_tool(tool_name=tool_name, **kwargs)
+        return self.user_tools.use_tool(name, **kwargs)
 
     def make_tool_call(
         self,
-        tool_name: str,
+        name: str,
         requestor: Literal["user", "assistant"] = "assistant",
         **kwargs,
     ) -> Any:
         """
         Make a tool call based on the requestor.
         Args:
-            tool_name: The name of the tool to call.
+            name: The name of the tool to call.
             requestor: The requestor of the tool call.
             kwargs: The arguments to pass to the tool.
         Returns:
@@ -145,12 +145,12 @@ class Environment:
         if requestor == "user":
             if self.solo_mode:
                 raise ValueError("User tool calls are not allowed in solo mode")
-            return self.use_user_tool(tool_name=tool_name, **kwargs)
+            return self.use_user_tool(name=name, **kwargs)
         elif requestor == "assistant":
             if self.solo_mode and self.user_tools is not None:
-                if self.user_tools.has_tool(tool_name):
-                    return self.use_user_tool(tool_name=tool_name, **kwargs)
-            return self.use_tool(tool_name=tool_name, **kwargs)
+                if self.user_tools.has_tool(name):
+                    return self.use_user_tool(name=name, **kwargs)
+            return self.use_tool(name=name, **kwargs)
         else:
             raise ValueError(f"Invalid requestor: {requestor}")
 
