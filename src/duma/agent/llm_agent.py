@@ -319,6 +319,14 @@ class LLMSoloAgent(LocalAgent[LLMAgentState]):
     STOP_FUNCTION_NAME = "done"
     TRANSFER_TOOL_NAME = "transfer_to_human_agents"
     STOP_TOKEN = "###STOP###"
+    MISSING_USER_ROLE_ERROR_MARKERS = (
+        "role of user",
+        "role=user",
+        "role 'user'",
+        'role "user"',
+        "at least one user",
+        "contain a user message",
+    )
 
     def __init__(
         self,
@@ -417,6 +425,24 @@ class LLMSoloAgent(LocalAgent[LLMAgentState]):
             return False
         return cls.STOP_TOKEN in message.content
 
+    @classmethod
+    def _has_user_message(cls, messages: list[Message]) -> bool:
+        return any(isinstance(message, UserMessage) for message in messages)
+
+    @classmethod
+    def _is_missing_user_role_error(cls, error: Exception) -> bool:
+        error_text = str(error).lower()
+        return any(marker in error_text for marker in cls.MISSING_USER_ROLE_ERROR_MARKERS)
+
+    def _build_bootstrap_user_message(self) -> UserMessage:
+        return UserMessage(
+            role="user",
+            content=(
+                "Proceed with the ticket above using available tools only. "
+                f"If complete, call `{self.STOP_FUNCTION_NAME}`."
+            ),
+        )
+
     def get_init_state(
         self, message_history: Optional[list[Message]] = None
     ) -> LLMAgentState:
@@ -453,15 +479,55 @@ class LLMSoloAgent(LocalAgent[LLMAgentState]):
         else:
             state.messages.append(message)
         messages = state.system_messages + state.messages
-        assistant_message = generate(
-            model=self.llm,
-            tools=self.tools,
-            messages=messages,
-            tool_choice="required",
-            **self.llm_args,
-        )
+        try:
+            assistant_message = generate(
+                model=self.llm,
+                tools=self.tools,
+                messages=messages,
+                tool_choice="required",
+                **self.llm_args,
+            )
+        except Exception as error:
+            if self._is_missing_user_role_error(error) and not self._has_user_message(
+                messages
+            ):
+                logger.warning(
+                    "Model/provider rejected a request without `role=user`. "
+                    "Injecting a bootstrap user message and retrying once."
+                )
+                state.messages.append(self._build_bootstrap_user_message())
+                messages = state.system_messages + state.messages
+                assistant_message = generate(
+                    model=self.llm,
+                    tools=self.tools,
+                    messages=messages,
+                    tool_choice="required",
+                    **self.llm_args,
+                )
+            else:
+                raise
         if not assistant_message.is_tool_call():
-            raise ValueError("LLMSoloAgent only supports tool calls.")
+            logger.warning(
+                "LLMSoloAgent expected a tool call but received text output. Retrying once with an explicit tool-call reminder."
+            )
+            retry_messages = messages + [
+                UserMessage(
+                    role="user",
+                    content=(
+                        "Please respond ONLY with a tool call. "
+                        f"If the task is complete, call `{self.STOP_FUNCTION_NAME}`."
+                    ),
+                )
+            ]
+            assistant_message = generate(
+                model=self.llm,
+                tools=self.tools,
+                messages=retry_messages,
+                tool_choice="auto",
+                **self.llm_args,
+            )
+            if not assistant_message.is_tool_call():
+                raise ValueError("LLMSoloAgent only supports tool calls.")
         message = self._check_if_stop_toolcall(assistant_message)
         state.messages.append(assistant_message)
         return assistant_message, state
