@@ -245,6 +245,29 @@ def _coerce_tool_call_arguments(
     return {}
 
 
+def _should_retry_with_auto_tool_choice(
+    error: Exception,
+    tool_choice: Any,
+    has_tools: bool,
+) -> bool:
+    """
+    Detect provider/model-specific incompatibility with tool_choice required/object.
+    """
+    if not has_tools:
+        return False
+    if not (tool_choice == "required" or isinstance(tool_choice, dict)):
+        return False
+    err_text = str(error).lower()
+    has_tool_choice_marker = "tool_choice" in err_text
+    has_unsupported_marker = (
+        "not supported" in err_text
+        or "does not support" in err_text
+        or "unsupported tool use" in err_text
+    )
+    has_required_or_object = "required" in err_text or "object" in err_text
+    return has_tool_choice_marker and has_unsupported_marker and has_required_or_object
+
+
 def generate(
     model: str,
     messages: list[Message],
@@ -286,6 +309,8 @@ def generate(
     tools = [tool.openai_schema for tool in tools] if tools else None
     if tools and tool_choice is None:
         tool_choice = "auto"
+    has_tools = tools is not None
+
     try:
         # Hugging Face router support:
         # - Allow model refs like vendor/model while setting provider independently
@@ -349,8 +374,25 @@ def generate(
             **kwargs,
         )
     except Exception as e:
-        logger.error(e)
-        raise e
+        if _should_retry_with_auto_tool_choice(
+            error=e,
+            tool_choice=tool_choice,
+            has_tools=has_tools,
+        ):
+            logger.warning(
+                f"Model/provider rejected tool_choice={tool_choice}. "
+                f"Retrying with tool_choice='auto'. Error: {e}"
+            )
+            response = completion(
+                model=litellm_model,
+                messages=litellm_messages,
+                tools=tools,
+                tool_choice="auto",
+                **kwargs,
+            )
+        else:
+            logger.error(e)
+            raise e
     cost = get_response_cost(response)
     usage = get_response_usage(response)
     response = response.choices[0]
