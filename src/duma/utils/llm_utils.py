@@ -30,6 +30,7 @@ from duma.data_model.message import (
     UserMessage,
 )
 from duma.environment.tool import Tool
+from duma.utils.model_ref import infer_provider, normalize_model_ref, to_litellm_model
 
 # litellm._turn_on_debug()
 
@@ -266,18 +267,31 @@ def generate(
     if kwargs.get("num_retries") is None:
         kwargs["num_retries"] = DEFAULT_MAX_RETRIES
 
-    if model.startswith("claude") and not ALLOW_SONNET_THINKING:
+    normalized_model = normalize_model_ref(model)
+    provider = infer_provider(
+        model=model,
+        api_base=kwargs.get("api_base"),
+        explicit_provider=kwargs.get("custom_llm_provider"),
+    )
+    litellm_model = to_litellm_model(normalized_model, provider)
+    kwargs.setdefault("custom_llm_provider", provider)
+
+    if (
+        litellm_model.startswith("claude")
+        or litellm_model.startswith("anthropic/claude")
+    ) and not ALLOW_SONNET_THINKING:
         kwargs["thinking"] = {"type": "disabled"}
+
     litellm_messages = to_litellm_messages(messages)
     tools = [tool.openai_schema for tool in tools] if tools else None
     if tools and tool_choice is None:
         tool_choice = "auto"
     try:
         # Hugging Face router support:
-        # - Allow model names like "huggingface/<org>/<model>:<variant>"
+        # - Allow model refs like vendor/model while setting provider independently
         # - Map HF_TOKEN -> HUGGINGFACE_API_KEY env var if not already set
         # - Provide a sensible default api_base if none was passed
-        if isinstance(model, str) and model.startswith("huggingface/"):
+        if provider == "huggingface":
             if (
                 os.getenv("HUGGINGFACE_API_KEY") is None
                 and os.getenv("HF_TOKEN") is not None
@@ -307,6 +321,7 @@ def generate(
         if openrouter_mode or (
             isinstance(model, str) and model.startswith("openrouter/")
         ):
+        if provider == "openrouter":
             # Convenience: allow reusing OPENAI_API_KEY as OPENROUTER_API_KEY.
             if (
                 os.getenv("OPENROUTER_API_KEY") is None
@@ -316,15 +331,6 @@ def generate(
 
             if "api_base" not in kwargs or not kwargs.get("api_base"):
                 kwargs["api_base"] = "https://openrouter.ai/api/v1"
-
-            # Normalize model name for OpenRouter endpoint:
-            # - "openrouter/openai/gpt-4o" -> "openai/gpt-4o"
-            # - "gpt-4o-mini" -> "openai/gpt-4o-mini"
-            if isinstance(model, str):
-                if model.startswith("openrouter/"):
-                    model = model.replace("openrouter/", "", 1)
-                elif "/" not in model:
-                    model = f"openai/{model}"
 
             extra_headers = dict(kwargs.get("extra_headers") or {})
             # Optional but recommended by OpenRouter
@@ -337,7 +343,7 @@ def generate(
             kwargs["extra_headers"] = extra_headers
 
         response = completion(
-            model=model,
+            model=litellm_model,
             messages=litellm_messages,
             tools=tools,
             tool_choice=tool_choice,

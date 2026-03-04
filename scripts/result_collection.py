@@ -17,27 +17,12 @@ from scipy.stats import binom
 
 from duma.data_model.simulation import MultiDomainResults, Results
 from duma.metrics.agent_metrics import is_successful, pass_hat_k
+from duma.utils.model_ref import normalize_for_reporting
 
 
 def _normalize_model_name(model: str | None) -> str:
-    """Normalize provider-prefixed model names for comparison/reporting.
-
-    Examples:
-    - openrouter/openai/gpt-4o -> gpt-4o
-    - openai/gpt-4o-mini -> gpt-4o-mini
-    - gpt-4o -> gpt-4o
-    """
-    if not isinstance(model, str):
-        return str(model)
-
-    if model.startswith("openrouter/"):
-        return model.split("/")[-1]
-
-    # Some routing code may turn plain models into openai/<model>
-    if model.startswith("openai/"):
-        return model.split("/", 1)[1]
-
-    return model
+    """Normalize model names for comparison/reporting."""
+    return normalize_for_reporting(model)
 
 
 def load_simulation_file(file_path: str | Path) -> Dict[str, Results]:
@@ -730,4 +715,3 @@ def compare_continuous_metrics(
         Tuple of (p-value, significance_level)
     """
     return t_test_independent(group1_values, group2_values)
-

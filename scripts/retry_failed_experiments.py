@@ -39,6 +39,7 @@ project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root / "src"))
 
 try:
+    from duma.utils.model_ref import normalize_model_ref
     from duma.utils.utils import DATA_DIR
 except ImportError:
     print(
@@ -105,17 +106,8 @@ def parse_error_log(error_log_path: Path) -> List[dict]:
 
 
 def _model_id_for_results(model: str) -> str:
-    """Normalize model name for result filenames.
-
-    Goal: avoid duplicating result sets when switching providers.
-
-    Examples:
-    - openrouter/openai/gpt-4o -> gpt-4o
-    - openrouter/openai/gpt-4o-mini -> gpt-4o-mini
-    """
-    if model.startswith("openrouter/"):
-        return model.split("/")[-1]
-    return model
+    """Normalize model name for result filenames."""
+    return normalize_model_ref(model)
 
 
 def _sanitize_model_for_filename(model: str) -> str:

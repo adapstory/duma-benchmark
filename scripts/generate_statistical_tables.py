@@ -19,6 +19,7 @@ import numpy as np
 
 from duma.data_model.simulation import MultiDomainResults, Results
 from duma.metrics.agent_metrics import is_successful
+from duma.utils.model_ref import normalize_for_reporting
 
 # Import statistical functions
 # Note: result_collection is in the same directory
@@ -38,14 +39,8 @@ from result_collection import (
 
 
 def _normalize_model_name(model: str | None) -> str:
-    """Normalize provider-prefixed model names for reporting/comparison."""
-    if not isinstance(model, str):
-        return str(model)
-    if model.startswith("openrouter/"):
-        return model.split("/")[-1]
-    if model.startswith("openai/"):
-        return model.split("/", 1)[1]
-    return model
+    """Normalize model names for reporting/comparison."""
+    return normalize_for_reporting(model)
 
 
 def escape_latex(text: str) -> str:
