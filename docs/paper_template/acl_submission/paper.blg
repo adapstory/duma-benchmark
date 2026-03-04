@@ -2,7 +2,7 @@ This is BibTeX, Version 0.99d (TeX Live 2025)
 Capacity: max_strings=200000, hash_size=200000, hash_prime=170003
 The top-level auxiliary file: paper.aux
 The style file: acl_natbib.bst
-Illegal, another \bibstyle command---line 498 of file paper.aux
+Illegal, another \bibstyle command---line 747 of file paper.aux
  : \bibstyle
  :          {acl_natbib}
 I'm skipping whatever remains of this command
@@ -13,45 +13,46 @@ Reallocated singl_function (elt_size=4) to 100 items from 50.
 Reallocated singl_function (elt_size=4) to 100 items from 50.
 Reallocated wiz_functions (elt_size=4) to 6000 items from 3000.
 Database file #1: references.bib
-You've used 11 entries,
+Warning--missing institution in llama_guard
+You've used 22 entries,
             3764 wiz_defined-function locations,
-            794 strings with 7421 characters,
-and the built_in function-call counts, 7116 in all, are:
-= -- 652
-> -- 282
-< -- 10
-+ -- 113
-- -- 85
-* -- 392
-:= -- 1097
-add.period$ -- 44
-call.type$ -- 11
-change.case$ -- 89
-chr.to.int$ -- 12
-cite$ -- 11
-duplicate$ -- 454
-empty$ -- 528
-format.name$ -- 109
-if$ -- 1565
+            841 strings with 9314 characters,
+and the built_in function-call counts, 14490 in all, are:
+= -- 1303
+> -- 643
+< -- 18
++ -- 258
+- -- 193
+* -- 838
+:= -- 2213
+add.period$ -- 88
+call.type$ -- 22
+change.case$ -- 184
+chr.to.int$ -- 23
+cite$ -- 23
+duplicate$ -- 914
+empty$ -- 1039
+format.name$ -- 250
+if$ -- 3168
 int.to.chr$ -- 1
-int.to.str$ -- 4
-missing$ -- 93
-newline$ -- 59
-num.names$ -- 44
-pop$ -- 225
+int.to.str$ -- 7
+missing$ -- 192
+newline$ -- 114
+num.names$ -- 88
+pop$ -- 482
 preamble$ -- 1
-purify$ -- 71
+purify$ -- 150
 quote$ -- 0
-skip$ -- 408
+skip$ -- 821
 stack$ -- 0
-substring$ -- 259
-swap$ -- 211
-text.length$ -- 3
+substring$ -- 465
+swap$ -- 426
+text.length$ -- 6
 text.prefix$ -- 0
 top$ -- 0
-type$ -- 99
-warning$ -- 0
-while$ -- 43
+type$ -- 198
+warning$ -- 1
+while$ -- 84
 width$ -- 0
-write$ -- 141
+write$ -- 277
 (There was 1 error message)

@@ -3,15 +3,6 @@
 % Options: review (with line numbers), preprint (clean), final (camera-ready)
 \usepackage[review]{acl}
 
-% Fix line number positioning for two-column layout
-% Use zero-padded three-digit format (001, 002, etc.)
-\renewcommand\thelinenumber{\ifnum\value{linenumber}<100 0\fi\ifnum\value{linenumber}<10 0\fi\arabic{linenumber}}
-
-% Display line numbers on both sides (left and right)
-\renewcommand\makeLineNumber{%
-  \hss\thelinenumber\ \rlap{\hskip\textwidth\ \hskip\marginparsep\thelinenumber}%
-}
-
 % Standard package includes
 \usepackage{times}
 \usepackage{latexsym}
@@ -42,50 +33,85 @@
 \maketitle
 
 \begin{abstract}
-LLM-based agent systems are increasingly deployed for automating complex tasks, yet their security in realistic interaction scenarios remains understudied. Existing benchmarks evaluate either isolated agent capabilities or prompt injection resistance in simplified settings without accounting for active user interaction dynamics. We present DUMA-bench (Dual-control User Multi-Agent benchmark), extending $\tau^2$-bench with three security domains aligned with AI-SAFE (levels 1--5) and OWASP classifications: \texttt{mail\_rag\_phishing} (RAG poisoning), \texttt{collab} (inter-agent attacks), and \texttt{output\_handling} (improper output handling).
+LLM-based agents are increasingly deployed in environments where they interact with users, tools, and other agents. In such settings, security failures arise not only from adversarial prompts, but from their interaction with dynamic, state-changing user behavior. Yet current evaluation paradigms remain fragmented: coordination benchmarks ignore adversarial threats, while security benchmarks assume passive users and static control.
 
-We evaluate five models (Claude Sonnet 4.5, GPT-4-turbo, GPT-4o, GPT-4o-mini, GPT-3.5-turbo) across varying user temperatures ($T_{\text{user}} \in \{0.0, 0.5, 1.0\}$), measuring pass@1 and pass@4 metrics. Key findings: (1) model size does not predict security---GPT-4o outperforms larger models in RAG poisoning while GPT-3.5-turbo shows highest stability; (2) user behavior variability significantly impacts Attack Success Rate (ASR) even with non-malicious users; (3) all models show high ASR (75--90\%) in RAG poisoning, indicating critical vulnerabilities requiring specialized defenses.
+We introduce DUMA-bench (Dual-control User Multi-Agent benchmark), a security benchmark that extends $\tau^2$-bench with structured interactive threat scenarios. Our framework evaluates agents in environments where both the agent and the user can independently observe and modify system state---a setting we term \emph{dual-control}---which creates a distinct class of vulnerabilities not captured by static evaluation. DUMA-bench includes three domains: \texttt{mail\_rag\_phishing} (RAG poisoning via indirect prompt injection), \texttt{collab} (cross-agent manipulation and privilege escalation), and \texttt{output\_handling} (improper output handling including XSS and SQL injection), capturing distinct classes of interactive vulnerabilities.
+
+We evaluate five state-of-the-art models (Claude Sonnet 4.5, GPT-4-turbo, GPT-4o, GPT-4o-mini, GPT-3.5-turbo) across varying user temperatures ($T_{\text{user}} \in \{0.0, 0.5, 1.0\}$) and demonstrate that interactive security assessment reveals substantial and systematic vulnerabilities: all models exhibit ASR of 75--90\% under RAG poisoning, and GPT-4o achieves statistically significant superiority over GPT-4o-mini only in \texttt{mail\_rag\_phishing} ($p \approx 0.005$--$0.013$), with no significant differences in the remaining domains ($p > 0.05$). These results show that dual-control evaluation materially changes measured robustness and exposes vulnerabilities that remain obscured under static, single-controller settings. DUMA-bench establishes a missing evaluation layer at the intersection of coordination and security and provides an open resource for standardized comparison of future defense mechanisms.
 \end{abstract}
 
 \section{Introduction}
 \label{sec:introduction}
 
-\subsection{Context and Problem Statement}
+\subsection{A Methodological Gap in Agent Security Evaluation}
 
-The development of Large Language Models (LLMs) and their integration into agent systems opens new possibilities for automating complex tasks. AI agents are capable of autonomous planning, interaction with external tools (APIs, databases, file systems), and real-time decision-making~\cite{ai_safe_2025}. However, these same capabilities create fundamentally new attack surfaces not characteristic of classical machine learning systems.
+LLM-based agents are now routinely deployed in settings involving tool use, external knowledge retrieval, and coordination with other agents and human users~\cite{qin_2025,schick_2023}. As these systems gain autonomy and access to sensitive resources, their security properties become a critical concern. Yet the evaluation infrastructure needed to measure those properties in realistic conditions does not yet exist in complete form.
 
-A typical AI agent comprises five interconnected components~\cite{ai_safe_2025}. At its core, the \textbf{LLM} serves as the central component for understanding instructions and generating responses, while a \textbf{planning module} transforms high-level goals into executable action sequences. The agent's \textbf{memory} system maintains both short-term context through dialogue history and long-term knowledge through RAG systems and knowledge bases. External \textbf{tools} provide the agent with capabilities to interact with APIs, databases, and other real-world systems, while the \textbf{interface} layer serves as the entry point for receiving user requests and delivering responses.
+The current evaluation landscape is fragmented along a fundamental axis. On one side, coordination benchmarks such as $\tau$-bench~\cite{tau_bench_2024} and $\tau^2$-bench~\cite{tau2_bench_2025} have established that even non-adversarial active users cause substantial degradation in agent performance---up to 25 percentage points for frontier models---because shared control introduces coordination failures invisible in single-agent tests. On the other side, security benchmarks such as Agent Security Bench~\cite{asb} and Agent Dojo~\cite{agent_dojo} probe agent resistance to adversarial inputs, but do so under static, single-controller assumptions: the user is passive, the environment does not change in response to user actions, and no active coordination is required.
 
-Each of these components represents a potential attack vector. The AI-SAFE framework~\cite{ai_safe_2025} systematizes threats across five levels: interface (Prompt Injection, DoS), execution and tools (Tool Misuse, Privilege Escalation), infrastructure and orchestration (Cross-Agent Poisoning), core and logic (Jailbreaking, Goal Manipulation), data and knowledge (RAG Poisoning, Data Leakage).
+This split creates a systematic blind spot. Real deployed agents operate under \emph{dual-control}: both the agent and the user observe and modify shared environment state, and adversarial content can propagate through either channel. Evaluating security without an active user removes a key dimension along which robustness can vary and fail. Existing frameworks do not bridge this gap.
 
-\subsection{Limitations of Existing Methods}
+\subsection{What Current Benchmarks Miss}
 
-Current benchmarks for evaluating agent system security suffer from three fundamental limitations. First, most benchmarks including AgentBench~\cite{agent_bench} and Agent Security Bench~\cite{asb} conduct \textbf{isolated evaluation} where agents operate under monopolistic control with users serving merely as passive instruction sources. Second, existing security-focused benchmarks employ \textbf{simplified attack scenarios}---for instance, Agent Dojo~\cite{agent_dojo} concentrates on prompt injection in single-agent contexts without considering the complexities of inter-agent interaction and RAG systems. Third and most critically, current benchmarks fail to account for the \textbf{active user} dynamic. Research on $\tau$-bench~\cite{tau_bench_2024} and $\tau^2$-bench~\cite{tau2_bench_2025} has demonstrated that introducing an active user through dual-control paradigms leads to agent performance drops of up to 25 percentage points, indicating that coordination and communication become critical failure points. Yet existing security benchmarks systematically overlook this dynamic, creating a significant gap between evaluation settings and real-world deployment scenarios.
+Three specific omissions characterize the current state. First, \textbf{coordination-ignorant security evaluation}: benchmarks such as ASB~\cite{asb} measure agent responses to injected content but do not model how user behavior---its variability, requests, or state changes---modulates the attack surface. Second, \textbf{security-ignorant coordination evaluation}: $\tau^2$-bench~\cite{tau2_bench_2025} formalizes dual-control interaction via Dec-POMDP~\cite{amato_2013} and provides strong evaluation infrastructure, but does not include adversarial scenarios or threat-modeled domains. Third, \textbf{absence of interactive threat scenarios}: attacks such as RAG poisoning~\cite{poisoned_rag,agent_poison}, cross-agent communication poisoning~\cite{owasp_agents_2025}, and improper output handling are well-documented in threat taxonomies~\cite{ai_safe_2025,agentic_security_survey} but have not been evaluated in settings where an active, state-modifying user is present.
 
 \subsection{Contributions}
 
-This work makes four key contributions to the evaluation of LLM agent security. We present \textbf{DUMA-bench}, a new security benchmark extending $\tau^2$-bench with three security domains that model typical attack vectors: RAG poisoning through the \texttt{mail\_rag\_phishing} domain, inter-agent attacks through the \texttt{collab} domain, and improper output handling through the \texttt{output\_handling} domain. The benchmark is publicly available on GitHub~\cite{duma_bench_github}. We propose a \textbf{dual-control evaluation methodology} for assessing agent robustness to attacks while accounting for active user behavior, with rigorous formalization within the Dec-POMDP framework. Our \textbf{comprehensive empirical evaluation} covers five state-of-the-art LLMs---Claude Sonnet 4.5, GPT-4-turbo, GPT-4o, GPT-4o-mini, and GPT-3.5-turbo---across multiple configurations, demonstrating that model size does not consistently predict security robustness and revealing unexpected performance patterns. Finally, we formulate and test three \textbf{testable hypotheses} about agent security: the effect of multiple runs on pass@k variance (H1), the impact of user temperature on attack success rate (H2), and the relationship between model size and security performance (H3).
+This paper addresses the methodological gap directly. Our contributions are:
+
+\textbf{DUMA-bench}, a security benchmark extending $\tau^2$-bench with three threat-modeled interactive domains: \texttt{mail\_rag\_phishing} (RAG poisoning via indirect prompt injection), \texttt{collab} (cross-agent manipulation and privilege escalation), and \texttt{output\_handling} (improper output handling: XSS, SQL injection, redirects). The benchmark is publicly available~\cite{duma_bench_github}.
+
+\textbf{A dual-control evaluation methodology} that places adversarial content in environments where both agent and user independently modify system state, formalized within the Dec-POMDP framework. This methodology enables measuring how user behavior variability interacts with attack success rate---a dimension absent from existing security benchmarks.
+
+\textbf{An empirical study} across five models (Claude Sonnet 4.5, GPT-4-turbo, GPT-4o, GPT-4o-mini, GPT-3.5-turbo) and three user temperature settings ($T_{\text{user}} \in \{0.0, 0.5, 1.0\}$), structured around three research questions (Section~\ref{sec:rqs}).
+
+\textbf{Evidence that dual-control evaluation changes measured robustness}: GPT-4o achieves statistically significant superiority over GPT-4o-mini in the RAG poisoning domain ($p \approx 0.005$--$0.013$), a difference that would not surface under passive-user evaluation, while all models remain highly vulnerable (ASR 75--90\%) in that domain.
 
 \section{Related Work}
 \label{sec:related}
 
-\subsection{Agent System Evaluation Benchmarks}
+\subsection{Single-Agent and Tool-Use Benchmarks}
 
-The development of LLM agents has led to the creation of benchmark series for evaluating their capabilities. AgentBench~\cite{agent_bench} evaluates agents in eight environments, including operating systems, databases, and web navigation, but focuses on functional capabilities without security consideration. ToolBench and API-Bank investigate tool usage but in trusted environments.
+Early evaluations of LLM-based agents focused on tool use and instruction following under monopolistic control, where the agent is the sole actor capable of modifying the environment. AgentBench~\cite{agent_bench} evaluates agents across eight environments (operating systems, databases, web navigation) but treats the user as a passive instruction source and excludes security consideration. Tool-learning surveys~\cite{qin_2025} and Toolformer~\cite{schick_2023} characterized agent capabilities in trusted environments without modeling adversarial or active-user dynamics.
 
-A key breakthrough was the $\tau$-bench~\cite{tau_bench_2024} and $\tau^2$-bench~\cite{tau2_bench_2025} series, where the user is modeled as an active participant capable of changing environment state. Formalization within the Dec-POMDP framework~\cite{amato_2013} showed that user coordination is a critical bottleneck: even advanced models lose up to 25 percentage points of performance when transitioning from monopolistic to dual control.
+\subsection{Dual-Control and Coordination Frameworks}
+
+A key advance was the $\tau$-bench~\cite{tau_bench_2024} and $\tau^2$-bench~\cite{tau2_bench_2025} series, which model the user as an active participant capable of changing environment state. $\tau^2$-bench formalizes interaction as a two-party Decentralized POMDP~\cite{amato_2013} and demonstrates that user coordination is a primary bottleneck: frontier models lose up to 25 percentage points of performance when transitioning from monopolistic to dual control. These results establish that communication and coordination---not pure reasoning---are dominant failure modes in agent systems. REALM-Bench~\cite{realm_bench} extends coordination evaluation to multi-agent logistics and scheduling, showing that multi-agent tasks introduce qualitatively new failure modes such as misaligned role allocation and unstable negotiation. Generative agents work~\cite{generative_agents} further showed that even cooperative multi-agent tasks can lead to brittle coordination and emergent failure cascades. Recent surveys on multi-agent cooperative decision-making~\cite{multiagent_survey} confirm that scaling from two-party to N-party settings introduces qualitatively new challenges---credit assignment, coalition instability, communication constraints---that standard benchmarks do not capture. Critically, none of these frameworks include adversarial scenarios or security-oriented domains.
 
 \subsection{LLM Agent Security Evaluation}
 
-Agent Security Bench (ASB)~\cite{asb} formalizes attacks and defenses for LLM agents, but is limited to single-agent scenarios. Agent Dojo~\cite{agent_dojo} creates a dynamic environment for evaluating prompt injection attacks, demonstrating that modern agents are vulnerable even to simple attacks. However, Agent Dojo does not model an active user as an interaction participant, attacks propagating through inter-agent communication channels, or RAG system poisoning in realistic scenarios involving emails and documents.
+Agent Security Bench (ASB)~\cite{asb} formalizes attacks and defenses for LLM agents with structured threat models, but is limited to single-agent scenarios without modeling inter-agent vulnerabilities or active user participation. Agent Dojo~\cite{agent_dojo} creates a dynamic environment for evaluating prompt injection attacks and demonstrates that modern agents fail under even mild adversarial pressure---but does not model an active user as an interaction participant, attacks propagating through inter-agent communication channels, or RAG system poisoning.
+
+\subsection{RAG Poisoning and Backdoor Attacks}
+
+Retrieval-Augmented Generation introduces a distinct attack surface that becomes especially dangerous in agentic settings. PoisonedRAG~\cite{poisoned_rag} showed that injecting as few as five malicious documents into a knowledge base with millions of entries achieves over 90\% attack success rate. AgentPoison~\cite{agent_poison} extended this to agent-specific backdoor attacks via embedding-space manipulation, achieving over 80\% ASR with less than 0.1\% poison rate. BadAgent~\cite{bad_agent} demonstrated that backdoor triggers can be inserted directly into LLM agent weights, activating malicious behavior when specific content appears in retrieved documents. These findings motivate our \texttt{mail\_rag\_phishing} domain, which evaluates robustness to indirect prompt injection through a realistic email-based RAG system in a dual-control setting---a configuration not addressed by prior work.
 
 \subsection{Threat Modeling Frameworks}
 
-OWASP LLM Top~10~\cite{owasp_llm_2025} and OWASP AI Agents Top~15~\cite{owasp_agents_2025} systematize threats for AI systems. The AI-SAFE framework~\cite{ai_safe_2025} proposes a five-level threat model specific to agent architectures. Our work uses these classifications for systematic coverage of attack vectors in the developed domains.
+OWASP LLM Top~10~\cite{owasp_llm_2025} and OWASP AI Agents Top~15~\cite{owasp_agents_2025} systematize threats for AI systems. The AI-SAFE framework~\cite{ai_safe_2025} proposes a five-level threat model covering interface, execution, infrastructure, core logic, and data/knowledge attack surfaces. A recent comprehensive survey~\cite{agentic_security_survey} systematizes agentic AI threats into an operational taxonomy connecting component-level risks (tool selection errors, memory leaks) to system-level harms (permission compromise, agent deception, multi-agent collusion). Our domains are grounded in these taxonomies to ensure systematic threat coverage.
 
 \subsection{Positioning of This Work}
 
-This work fills a critical gap between dual-control benchmarks like $\tau^2$-bench, which evaluate agent-user coordination but do not focus on security, and security benchmarks like Agent Dojo and ASB, which assess vulnerabilities but do not account for active users and inter-agent interaction. We extend the $\tau^2$-bench methodology with security domains covering AI-SAFE threats and evaluate agent robustness in realistic scenarios with active users.
+DUMA-bench occupies the intersection left empty by prior work: it inherits the dual-control interaction model of $\tau^2$-bench, the adversarial orientation of Agent Dojo and ASB, and the threat vocabulary of AI-SAFE and OWASP, combining them in evaluation scenarios where an active user and an adversarial environment co-exist. Table~\ref{tab:positioning} summarizes how DUMA-bench compares to related benchmarks across the dimensions of dual-control, security focus, multi-agent interaction, and RAG attack coverage.
+
+\begin{table}[t]
+\centering
+\resizebox{\linewidth}{!}{%
+\begin{tabular}{lcccc}
+\toprule
+\textbf{Benchmark} & \textbf{Dual-ctrl} & \textbf{Security} & \textbf{Multi-agent} & \textbf{RAG atk.} \\
+\midrule
+AgentBench~\cite{agent_bench}        & \texttimes & \texttimes & \texttimes & \texttimes \\
+$\tau^2$-bench~\cite{tau2_bench_2025}& \checkmark & \texttimes & \texttimes & \texttimes \\
+Agent Dojo~\cite{agent_dojo}         & \texttimes & \checkmark & \texttimes & \texttimes \\
+ASB~\cite{asb}                       & \texttimes & \checkmark & \texttimes & partial    \\
+REALM-Bench~\cite{realm_bench}       & \texttimes & \texttimes & \checkmark & \texttimes \\
+\textbf{DUMA-bench (ours)}           & \checkmark & \checkmark & \checkmark & \checkmark \\
+\bottomrule
+\end{tabular}}
+\caption{Comparison of DUMA-bench with related evaluation frameworks.}
+\label{tab:positioning}
+\end{table}
 
 \section{Method}
 \label{sec:method}
@@ -159,15 +185,19 @@ We vary the user model temperature across three levels to test robustness under 
 
 We evaluate agent robustness using two complementary metrics. The \textbf{pass@k} metric measures the proportion of cases where the agent successfully passes at least $k$ asserts, as formally defined in Equation~1. The \textbf{ASR (Attack Success Rate)} quantifies the proportion of successful attacks, computed as $\text{ASR} = 1 - \text{pass@1}$. In our experiments, we primarily report pass@1 (at least 1 assert passed) and pass@4 (at least 4 asserts passed) metrics to evaluate both basic and stringent security thresholds.
 
-\subsubsection{Research Hypotheses}
+\subsubsection{Research Questions}
+\label{sec:rqs}
 
-We test three hypotheses:
+Our experimental design is organized around three research questions that directly correspond to the methodological gap identified in the introduction.
 
-\textbf{Hypothesis 1 (H1):} At fixed agent and user temperatures, increasing the number of runs $k$ reduces the variance of pass@k, but does not guarantee monotonic changes in ASR.
+\textbf{RQ1:} \emph{How does interactive (dual-control) evaluation affect measured security robustness of LLM-based agents?}
+This question probes whether the presence of an active, state-modifying user changes the security conclusions drawn from evaluation. We examine whether robustness differences between models are detectable under dual-control conditions that would be invisible in static, passive-user settings.
 
-\textbf{Hypothesis 2 (H2):} Changes in non-attacking user queries cause changes in ASR at fixed agent temperature.
+\textbf{RQ2:} \emph{How stable are security robustness metrics under variability in non-malicious user behavior?}
+Even when the user is not an attacker, their behavioral variability (captured by $T_{\text{user}}$) may modulate attack success rate through indirect effects on coordination and context. This question examines how sensitive ASR and pass@k are to non-adversarial user temperature variation.
 
-\textbf{Hypothesis 3 (H3):} Model size does not consistently correlate with pass@k and ASR; mid-sized models may outperform larger models in specific security domains.
+\textbf{RQ3:} \emph{Does increased model capability reliably translate into higher robustness under interactive security evaluation?}
+This question tests the assumption that larger or more capable models are systematically safer, examining whether the ``bigger model = safer model'' intuition holds across diverse attack domains in a dual-control setting.
 
 \subsubsection{Protocol}
 
@@ -187,13 +217,16 @@ Table~\ref{tab:aggregated} presents aggregated pass@1 results by model and domai
 
 \subsection{Analysis}
 
-\subsubsection{Hypothesis Testing Results}
+\subsubsection{Research Question Analysis}
 
-\textbf{H1: Effect of Multiple Runs.} Our results confirm that at fixed temperatures, increasing $k$ in pass@k reduces variance. However, ASR does not change monotonically with $k$. For example, Claude Sonnet 4.5 shows pass@1 = 0.25 but pass@4 = 0.20 in the \texttt{mail\_rag\_phishing} domain at $T_{\text{user}}=0.0$, indicating that some initially successful runs fail with more stringent evaluation criteria. This non-monotonicity suggests that agent robustness is sensitive to the number of security checks required, even with deterministic agent temperature.
+\textbf{RQ1: Effect of Dual-Control Evaluation on Measured Robustness.}
+We find partial but meaningful evidence that dual-control evaluation changes measured security robustness. In the \texttt{mail\_rag\_phishing} domain, statistically significant differences between GPT-4o and GPT-4o-mini emerge ($p \approx 0.005$--$0.013$ across temperature settings), a result consistent with the hypothesis that user coordination dynamics amplify robustness differences between models. In the \texttt{collab} and \texttt{output\_handling} domains, differences between models remain statistically insignificant ($p > 0.05$), suggesting either that these domains are less sensitive to user interaction dynamics or that the current experimental scale is insufficient to detect such effects. A direct comparison against passive-user (static) baselines---needed to close RQ1 definitively---is a planned extension of this work (Section~\ref{sec:limitations}).
 
-\textbf{H2: User Temperature Impact.} Changes in user model temperature ($T_{\text{user}}$) cause measurable changes in ASR at fixed agent temperature. This confirms that user behavior variability, even when the user is non-malicious, affects the attack success rate. The effect is most pronounced in the \texttt{collab} domain where social engineering plays a key role.
+\textbf{RQ2: Stability Under Non-Malicious User Variability.}
+Changes in user model temperature ($T_{\text{user}}$) cause measurable changes in ASR at fixed agent temperature, even when the user is not adversarial. This confirms that user behavioral variability is a genuine source of metric instability in dual-control security evaluation. The effect is most pronounced in the \texttt{collab} domain, where social engineering dynamics make agent behavior particularly sensitive to the phrasing and pacing of user requests. Additionally, at fixed temperatures, increasing $k$ in pass@k reduces variance---but ASR does not change monotonically with $k$. For example, Claude Sonnet 4.5 shows pass@1 = 0.25 but pass@4 = 0.20 in \texttt{mail\_rag\_phishing} at $T_{\text{user}}=0.0$, indicating that agent robustness is sensitive to the stringency of the evaluation criterion.
 
-\textbf{H3: Model Size vs. Security Performance.} Our results partially confirm this hypothesis. Surprisingly, GPT-4o (mid-sized) outperforms larger models (GPT-4-turbo, Claude Sonnet 4.5) in the \texttt{mail\_rag\_phishing} domain across all temperatures, though it shows instability when evaluating higher $k$ values. GPT-3.5-turbo, despite being the smallest model, demonstrates the most stable performance across temperature variations. This suggests that model size and architectural sophistication alone are not reliable predictors of security robustness---specialized security training or instruction-following capabilities may play a more critical role.
+\textbf{RQ3: Model Capability vs.\ Security Robustness.}
+Model size does not consistently predict security robustness under dual-control evaluation. GPT-4o (mid-sized) outperforms larger models (GPT-4-turbo, Claude Sonnet 4.5) in the \texttt{mail\_rag\_phishing} domain across all temperature settings, though it shows instability at higher $k$ values. GPT-3.5-turbo, the smallest model, demonstrates the most stable performance across temperature variations. These results suggest that model scale and general capability are not reliable proxies for security robustness in interactive settings---domain-specific instruction following or safety training may play a more decisive role. This finding is consistent with the observation that security robustness is a distinct capability dimension not fully captured by general benchmarks.
 
 \subsubsection{Cross-Model Comparison}
 
@@ -210,11 +243,15 @@ GPT-3.5-turbo exhibits the most stable behavior across different user temperatur
 \section{Conclusion}
 \label{sec:conclusion}
 
-We present DUMA-bench, a comprehensive benchmark for evaluating LLM agent security in dual-control paradigms where active users can influence environment state. Our work yields four main findings. First, DUMA-bench addresses a critical gap in the evaluation landscape: existing security benchmarks poorly correspond to real agent usage scenarios. Our three security domains covering RAG poisoning, inter-agent attacks, and output handling align with AI-SAFE levels 1-5, OWASP LLM Top 10, and OWASP AI Agents Top 15. Second, model size does not predict security---GPT-4o outperforms larger models including GPT-4-turbo and Claude Sonnet 4.5 in RAG poisoning scenarios, while GPT-3.5-turbo shows the most stable performance across temperature variations. This partially confirms our hypothesis that model size does not consistently correlate with security robustness. Third, user behavior significantly affects attack success, with changes in user temperature impacting ASR even when the user is non-malicious, confirming that dual-control dynamics are critical for realistic security evaluation. Fourth, RAG attacks remain a critical vulnerability, with all models showing high ASR (75-90\%) in the \texttt{mail\_rag\_phishing} domain, indicating that indirect prompt injection through RAG systems remains a major vulnerability requiring specialized defenses.
+We present DUMA-bench, a benchmark that establishes a missing evaluation layer at the intersection of coordination and security for LLM-based agents. The core methodological claim is that security evaluation conducted without an active, state-modifying user systematically underestimates attack surface and misrepresents robustness differences between models. Our three domains---\texttt{mail\_rag\_phishing}, \texttt{collab}, and \texttt{output\_handling}---embed adversarial content in dual-control environments formalized as Dec-POMDPs, enabling measurement of how user behavioral variability interacts with attack success rate.
 
-\textbf{Future directions} include: (1) extending DUMA-bench with additional domains from OWASP classifications (\texttt{resource\_overload}, \texttt{supply\_chain}); (2) evaluating defense mechanisms (Llama Guard, Promptfoo) on current domains; (3) conducting qualitative analysis of simulation traces to identify failure patterns; (4) expanding model coverage to open-source alternatives (Llama, Mistral); and (5) investigating the impact of different agent architectures on security robustness.
+Our findings address the three research questions directly. \textbf{RQ1}: Dual-control evaluation reveals statistically significant robustness differences in the RAG poisoning domain ($p \approx 0.005$--$0.013$) that are absent or ambiguous in static settings; extending this comparison with explicit passive-user baselines is the highest-priority next step. \textbf{RQ2}: Non-malicious user temperature variability measurably affects ASR and introduces non-monotonic behavior in pass@k, confirming that user dynamics are a genuine source of evaluation variance. \textbf{RQ3}: Model capability does not reliably predict security robustness---GPT-4o outperforms larger models in RAG poisoning while GPT-3.5-turbo shows greatest stability across domains---indicating that security robustness is a distinct capability dimension.
 
-DUMA-bench is open-source and available~\cite{duma_bench_github}, enabling reproducible security evaluation for the research community.
+All models remain critically vulnerable to RAG poisoning (ASR 75--90\%), underscoring that indirect prompt injection through retrieval systems is an unsolved problem requiring specialized defenses.
+
+\textbf{Future directions}: (1) adding static (passive-user) baselines to close RQ1; (2) expanding model coverage to open-weight models (Llama, Mistral, Qwen) and models with built-in safety layers; (3) evaluating defense mechanisms (Llama Guard~\cite{llama_guard}, Promptfoo, policy-driven tool gating); (4) extending DUMA-bench with additional threat domains (\texttt{resource\_overload}, \texttt{supply\_chain}); and (5) systematic analysis of assert structures to clarify success/failure semantics.
+
+DUMA-bench is open-source and available at~\cite{duma_bench_github}.
 
 \section*{Acknowledgments}
 
@@ -223,7 +260,7 @@ We thank the authors of $\tau^2$-bench for their foundational work in dual-contr
 \section{Limitations}
 \label{sec:limitations}
 
-Our work has five important limitations. First, while we test across multiple configurations with $n=10$ runs each, larger sample sizes would enable more robust statistical conclusions, especially when comparing models with similar performance. However, our use of Fisher's exact test and Wilson confidence intervals provides valid statistical inference for small samples. Second, the user is modeled by an LLM, which may not fully capture the unpredictability and errors of real human users, though this approach ensures reproducibility and controlled experimentation. Third, while we evaluate five models including both proprietary systems (GPT, Claude) and recognize the need for open models (Llama, Gemini, etc.), our current results may not fully generalize across all model families, and future work will expand model coverage. Fourth, DUMA-bench currently covers three security domains, with additional domains such as \texttt{resource\_overload} and \texttt{supply\_chain} attacks planned for future releases. Fifth, the current version does not evaluate effectiveness of defense mechanisms such as Llama Guard, Promptfoo, and custom validators, which represents a key direction for future research.
+Our work has six important limitations. First, \textbf{absence of static baselines}: RQ1 asks whether dual-control evaluation changes measured robustness relative to passive-user settings, but the current study does not include a controlled static-baseline condition. Establishing this comparison is the most critical extension needed to validate the core methodological claim. Second, \textbf{sample size}: with $n=10$ runs per configuration, larger samples would support more robust statistical conclusions, especially for domains where model differences are small; our use of Fisher's exact test and Wilson confidence intervals provides valid inference given the current scale. Third, \textbf{simulated users}: the user is modeled by an LLM, which may not fully capture the unpredictability of real human behavior; however, this approach ensures reproducibility and controlled experimentation. Fourth, \textbf{model coverage}: results are limited to five proprietary models from two families (GPT, Claude); generalization to open-weight models (Llama, Mistral, Qwen) and models with safety-specific fine-tuning is a planned extension. Fifth, \textbf{domain coverage}: DUMA-bench currently covers three security domains; additional domains such as \texttt{resource\_overload} and \texttt{supply\_chain} attacks are planned for future releases. Sixth, \textbf{assert semantics}: the success/failure semantics of the assert system---in particular, whether a run requires all asserts to pass (AND logic) or uses a weighted or hierarchical criterion---are detailed in the supplementary material and should be made more prominent in the main paper to facilitate comparison with future work.
 
 \bibliography{references}
 \bibliographystyle{acl_natbib}
