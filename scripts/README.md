@@ -26,7 +26,9 @@
   --models gpt-4o gpt-4o-mini \
   --temperatures 0.0 0.5 1.0 \
   --domains mail_rag_phishing collab output_handling \
-  --num-trials 10
+  --num-trials 10 \
+  --max-concurrency 2 \
+  --duma-max-concurrency 1
 ```
 
 ## Дозапуск только недостающих результатов
