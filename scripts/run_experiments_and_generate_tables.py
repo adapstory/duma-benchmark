@@ -134,6 +134,7 @@ def run_all_experiments(
     solo: bool = False,  # Режим solo (агент без пользователя)
     agent_base_url: Optional[str] = None,  # Base URL для провайдера LLM
     api_key_env: Optional[str] = None,  # Имя переменной окружения для API ключа
+    duma_max_concurrency: int = 1,  # Внутренняя параллельность duma run
 ) -> Path:
     """
     Запустить все эксперименты.
@@ -149,6 +150,11 @@ def run_all_experiments(
     Returns:
         Path to results directory
     """
+    if max_concurrency <= 0:
+        raise ValueError("max_concurrency must be > 0")
+    if duma_max_concurrency <= 0:
+        raise ValueError("duma_max_concurrency must be > 0")
+
     # duma сохраняет файлы в data/duma/simulations/ автоматически
     # --save-to принимает имя файла БЕЗ расширения
     from duma.utils.utils import DATA_DIR
@@ -259,7 +265,7 @@ def run_all_experiments(
                             "--save-to",
                             file_name,
                             "--max-concurrency",
-                            str(max_concurrency),
+                            str(duma_max_concurrency),
                         ]
                     else:
                         effective_user_llm = user_llm if user_llm else model
@@ -281,7 +287,7 @@ def run_all_experiments(
                             "--save-to",
                             file_name,
                             "--max-concurrency",
-                            str(max_concurrency),
+                            str(duma_max_concurrency),
                         ]
                     # Добавляем base URL и API key env если указаны
                     if agent_base_url:
@@ -427,7 +433,10 @@ def run_all_experiments(
         (idx, cmd, output_file) for idx, (cmd, output_file) in enumerate(commands, 1)
     ]
 
-    print(f"🚀 Starting parallel execution with max_workers={max_concurrency}")
+    print(
+        "🚀 Starting parallel execution with "
+        f"max_workers={max_concurrency}, duma_max_concurrency={duma_max_concurrency}"
+    )
     print(f"   Total experiments: {len(indexed_commands)}")
 
     # Очистить лог ошибок при старте (используем абсолютный путь)
@@ -877,10 +886,17 @@ def generate_visualizations(metrics: Dict, output_dir: Path):
 
                     if passk_agg is not None and not passk_agg.empty:
                         pivot_passk = passk_agg.pivot_table(
-                            values=pass_k_col, index="model", columns="domain", aggfunc="mean"
+                            values=pass_k_col,
+                            index="model",
+                            columns="domain",
+                            aggfunc="mean",
                         )
                         pivot_passk.plot(
-                            kind="bar", ax=ax, width=0.7, edgecolor="black", linewidth=0.5
+                            kind="bar",
+                            ax=ax,
+                            width=0.7,
+                            edgecolor="black",
+                            linewidth=0.5,
                         )
                         ax.set_ylabel(f"pass@{k}", fontsize=11)
                         ax.set_xlabel("Model", fontsize=11)
@@ -892,7 +908,9 @@ def generate_visualizations(metrics: Dict, output_dir: Path):
                             fancybox=False,
                             edgecolor="black",
                         )
-                        ax.grid(True, alpha=0.2, axis="y", linestyle="--", linewidth=0.5)
+                        ax.grid(
+                            True, alpha=0.2, axis="y", linestyle="--", linewidth=0.5
+                        )
                         ax.set_ylim([0, 1.05])
                         plt.xticks(rotation=45, ha="right")
                         plt.tight_layout()
@@ -905,14 +923,12 @@ def generate_visualizations(metrics: Dict, output_dir: Path):
                             pad_inches=0.1,
                         )
                         plt.close()
-                        print(f"Saved: {output_dir / f'pass{k}_by_domain_T{temp_str}.pdf'}")
+                        print(
+                            f"Saved: {output_dir / f'pass{k}_by_domain_T{temp_str}.pdf'}"
+                        )
 
     # 1d. Comprehensive pass@k heatmap by model, domain, and temperature
-    if (
-        "temperature" in df.columns
-        and "domain" in df.columns
-        and "model" in df.columns
-    ):
+    if "temperature" in df.columns and "domain" in df.columns and "model" in df.columns:
         from matplotlib import colors as mcolors
 
         for k in [1, 2, 3, 4]:
@@ -944,7 +960,10 @@ def generate_visualizations(metrics: Dict, output_dir: Path):
             heatmap_data = heatmap_data.reindex(
                 sorted(
                     heatmap_data.index,
-                    key=lambda s: (s.split(" (T=")[0], float(s.split("T=")[1].rstrip(")"))),
+                    key=lambda s: (
+                        s.split(" (T=")[0],
+                        float(s.split("T=")[1].rstrip(")")),
+                    ),
                 )
             )
 
@@ -1566,7 +1585,13 @@ def main():
         "--max-concurrency",
         type=int,
         default=3,
-        help="Максимальное количество параллельных запусков",
+        help="Максимальное количество параллельных запусков экспериментов (процессов duma run)",
+    )
+    parser.add_argument(
+        "--duma-max-concurrency",
+        type=int,
+        default=1,
+        help="Внутренняя параллельность в каждом duma run (параллельные trials внутри одного эксперимента)",
     )
     parser.add_argument(
         "--skip-experiments",
@@ -1661,6 +1686,7 @@ def main():
             solo=args.solo,
             agent_base_url=args.agent_base_url,
             api_key_env=args.api_key_env,
+            duma_max_concurrency=args.duma_max_concurrency,
         )
     else:
         print("Пропуск запуска экспериментов (--skip-experiments)")

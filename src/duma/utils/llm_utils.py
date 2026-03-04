@@ -1,4 +1,5 @@
 import json
+import os
 import re
 from typing import Any, Optional
 
@@ -7,7 +8,6 @@ from litellm import completion, completion_cost
 from litellm.caching.caching import Cache
 from litellm.main import ModelResponse, Usage
 from loguru import logger
-import os
 
 from duma.config import (
     DEFAULT_LLM_CACHE_TYPE,
@@ -179,6 +179,72 @@ def to_litellm_messages(messages: list[Message]) -> list[dict]:
     return litellm_messages
 
 
+def _short_repr(value: Any, max_len: int = 160) -> str:
+    text = repr(value)
+    if len(text) > max_len:
+        return f"{text[:max_len]}..."
+    return text
+
+
+def _coerce_tool_call_arguments(
+    raw_arguments: Any,
+    *,
+    tool_name: str,
+) -> dict[str, Any]:
+    """
+    Coerce tool-call arguments into a dict.
+    LLM providers occasionally return malformed payloads (empty string, function name, etc.).
+    We fall back to {} instead of crashing the whole run.
+    """
+    if isinstance(raw_arguments, dict):
+        return raw_arguments
+
+    if raw_arguments is None:
+        logger.warning(
+            f"Tool call '{tool_name}' returned empty arguments. Falling back to {{}}."
+        )
+        return {}
+
+    if isinstance(raw_arguments, str):
+        raw_str = raw_arguments.strip()
+        if raw_str == "" or raw_str.lower() in {"none", "null"}:
+            logger.warning(
+                f"Tool call '{tool_name}' returned blank arguments string. Falling back to {{}}."
+            )
+            return {}
+        if raw_str == tool_name:
+            logger.warning(
+                f"Tool call '{tool_name}' returned function name instead of JSON arguments. Falling back to {{}}."
+            )
+            return {}
+        try:
+            parsed = json.loads(raw_str)
+        except json.JSONDecodeError:
+            logger.warning(
+                f"Tool call '{tool_name}' has non-JSON arguments={_short_repr(raw_arguments)}. Falling back to {{}}."
+            )
+            return {}
+        if isinstance(parsed, dict):
+            return parsed
+        logger.warning(
+            f"Tool call '{tool_name}' has JSON arguments of type {type(parsed).__name__}, expected object. Falling back to {{}}."
+        )
+        return {}
+
+    if hasattr(raw_arguments, "model_dump"):
+        try:
+            dumped = raw_arguments.model_dump()
+            if isinstance(dumped, dict):
+                return dumped
+        except Exception:
+            pass
+
+    logger.warning(
+        f"Tool call '{tool_name}' has unsupported arguments type {type(raw_arguments).__name__} ({_short_repr(raw_arguments)}). Falling back to {{}}."
+    )
+    return {}
+
+
 def generate(
     model: str,
     messages: list[Message],
@@ -236,6 +302,25 @@ def generate(
                 kwargs["api_base"] = "https://router.huggingface.co/v1"
 
         # OpenRouter support (OpenAI-compatible endpoint + model catalog at https://openrouter.ai/models)
+        #
+        # This repo often runs with OPENROUTER_API_KEY, but some internal models
+        # (e.g. output evaluator) might still be configured as "gpt-4o-mini".
+        # If we detect an OpenRouter key (sk-or-...), route ALL such requests to
+        # OpenRouter and normalize model names.
+        openrouter_key = os.getenv("OPENROUTER_API_KEY")
+        openai_key = os.getenv("OPENAI_API_KEY")
+        openrouter_mode = (
+            (isinstance(openrouter_key, str) and openrouter_key.startswith("sk-or-"))
+            or (isinstance(openai_key, str) and openai_key.startswith("sk-or-"))
+            or (
+                isinstance(kwargs.get("api_key"), str)
+                and kwargs.get("api_key").startswith("sk-or-")
+            )
+        )
+
+        if openrouter_mode or (
+            isinstance(model, str) and model.startswith("openrouter/")
+        ):
         if provider == "openrouter":
             # Convenience: allow reusing OPENAI_API_KEY as OPENROUTER_API_KEY.
             if (
@@ -249,7 +334,9 @@ def generate(
 
             extra_headers = dict(kwargs.get("extra_headers") or {})
             # Optional but recommended by OpenRouter
-            extra_headers.setdefault("X-Title", os.getenv("OPENROUTER_APP_NAME", "duma"))
+            extra_headers.setdefault(
+                "X-Title", os.getenv("OPENROUTER_APP_NAME", "duma")
+            )
             referer = os.getenv("OPENROUTER_HTTP_REFERER")
             if referer:
                 extra_headers.setdefault("HTTP-Referer", referer)
@@ -279,15 +366,36 @@ def generate(
         "The response should be an assistant message"
     )
     content = response.message.content
-    tool_calls = response.message.tool_calls or []
-    tool_calls = [
-        ToolCall(
-            id=tool_call.id,
-            name=tool_call.function.name,
-            arguments=json.loads(tool_call.function.arguments),
+    response_tool_calls = response.message.tool_calls or []
+    tool_calls = []
+    for tool_call in response_tool_calls:
+        function = getattr(tool_call, "function", None)
+        tool_name = getattr(function, "name", "") if function is not None else ""
+        tool_name = tool_name if isinstance(tool_name, str) else str(tool_name)
+        if tool_name == "":
+            logger.warning(
+                "Received tool call without function name. Using __invalid_tool_name__."
+            )
+            tool_name = "__invalid_tool_name__"
+
+        tool_call_id = getattr(tool_call, "id", "")
+        if not isinstance(tool_call_id, str):
+            tool_call_id = str(tool_call_id)
+
+        raw_arguments = (
+            getattr(function, "arguments", None) if function is not None else None
         )
-        for tool_call in tool_calls
-    ]
+        arguments = _coerce_tool_call_arguments(
+            raw_arguments,
+            tool_name=tool_name,
+        )
+        tool_calls.append(
+            ToolCall(
+                id=tool_call_id,
+                name=tool_name,
+                arguments=arguments,
+            )
+        )
     tool_calls = tool_calls or None
 
     message = AssistantMessage(

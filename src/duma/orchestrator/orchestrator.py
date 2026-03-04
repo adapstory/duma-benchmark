@@ -1,5 +1,7 @@
+import json
 import time
 import uuid
+from collections import deque
 from copy import deepcopy
 from datetime import datetime, timedelta
 from enum import Enum
@@ -53,6 +55,9 @@ class Orchestrator:
         max_errors: int = 10,
         seed: Optional[int] = None,
         solo_mode: bool = False,
+        loop_guard_window: int = 10,
+        loop_guard_max_unique_messages: int = 2,
+        max_completion_tokens_per_message: Optional[int] = 5000,
     ):
         self.domain = domain
         self.agent = agent
@@ -73,6 +78,17 @@ class Orchestrator:
         self.from_role: Optional[Role] = None
         self.to_role: Optional[Role] = None
         self.message: Optional[Message] = None
+        self.loop_guard_window = max(loop_guard_window, 0)
+        self.loop_guard_max_unique_messages = max(loop_guard_max_unique_messages, 1)
+        self.max_completion_tokens_per_message = (
+            max_completion_tokens_per_message
+            if max_completion_tokens_per_message is None
+            or max_completion_tokens_per_message > 0
+            else None
+        )
+        self._recent_participant_signatures: deque[str] = deque(
+            maxlen=self.loop_guard_window if self.loop_guard_window > 0 else 1
+        )
 
     def initialize(self):
         """
@@ -240,6 +256,95 @@ class Orchestrator:
                     self.termination_reason = TerminationReason.AGENT_STOP
 
         self.environment.sync_tools()
+        self._seed_loop_guard_from_history()
+
+    def _seed_loop_guard_from_history(self):
+        self._recent_participant_signatures.clear()
+        if self.loop_guard_window <= 0:
+            return
+        for msg in self.trajectory:
+            if isinstance(msg, (AssistantMessage, UserMessage)):
+                self._recent_participant_signatures.append(self._message_signature(msg))
+
+    def _mark_error(
+        self, context: str, exc: Optional[Exception] = None, *, fatal: bool = False
+    ):
+        if exc is not None:
+            logger.warning(f"{context}: {exc}")
+        else:
+            logger.warning(context)
+        self.num_errors += 1
+        if fatal or self.num_errors >= self.max_errors:
+            self.done = True
+            self.termination_reason = TerminationReason.TOO_MANY_ERRORS
+            self.num_errors = max(self.num_errors, self.max_errors)
+
+    @staticmethod
+    def _normalize_text(text: Optional[str], max_len: int = 240) -> str:
+        if text is None:
+            return ""
+        normalized = " ".join(text.split()).strip().lower()
+        if len(normalized) > max_len:
+            return normalized[:max_len]
+        return normalized
+
+    def _message_signature(self, message: AssistantMessage | UserMessage) -> str:
+        tool_calls = message.tool_calls or []
+        tool_sig_parts = []
+        for tool_call in tool_calls:
+            try:
+                args = json.dumps(
+                    tool_call.arguments, sort_keys=True, ensure_ascii=True
+                )
+            except Exception:
+                args = str(tool_call.arguments)
+            if len(args) > 120:
+                args = args[:120]
+            tool_sig_parts.append(f"{tool_call.name}:{args}")
+        tool_sig = "|".join(tool_sig_parts)
+        content_sig = self._normalize_text(message.content)
+        return f"{message.role}|{content_sig}|{tool_sig}"
+
+    def _check_message_token_guard(self, message: AssistantMessage | UserMessage):
+        if self.max_completion_tokens_per_message is None:
+            return
+        usage = message.usage or {}
+        completion_tokens = usage.get("completion_tokens")
+        if not isinstance(completion_tokens, (int, float)):
+            return
+        if completion_tokens > self.max_completion_tokens_per_message:
+            self._mark_error(
+                (
+                    f"Completion token guard triggered for {message.role} message: "
+                    f"{completion_tokens} > {self.max_completion_tokens_per_message}"
+                ),
+                fatal=True,
+            )
+
+    def _check_loop_guard(self, message: AssistantMessage | UserMessage):
+        if self.loop_guard_window <= 0:
+            return
+        self._recent_participant_signatures.append(self._message_signature(message))
+        if len(self._recent_participant_signatures) < self.loop_guard_window:
+            return
+        unique_messages = len(set(self._recent_participant_signatures))
+        if unique_messages <= self.loop_guard_max_unique_messages:
+            recent_preview = " || ".join(list(self._recent_participant_signatures)[-4:])
+            self._mark_error(
+                (
+                    "Loop guard triggered: "
+                    f"{unique_messages} unique participant messages in the last "
+                    f"{self.loop_guard_window} messages. Recent={recent_preview}"
+                ),
+                fatal=True,
+            )
+
+    def _append_participant_message(self, message: AssistantMessage | UserMessage):
+        self.trajectory.append(message)
+        self._check_message_token_guard(message)
+        if self.done:
+            return
+        self._check_loop_guard(message)
 
     def run(self) -> SimulationRun:
         """
@@ -253,10 +358,10 @@ class Orchestrator:
         self.initialize()
         while not self.done:
             self.step()
-            if self.step_count >= self.max_steps:
+            if not self.done and self.step_count >= self.max_steps:
                 self.done = True
                 self.termination_reason = TerminationReason.MAX_STEPS
-            if self.num_errors >= self.max_errors:
+            if not self.done and self.num_errors >= self.max_errors:
                 self.done = True
                 self.termination_reason = TerminationReason.TOO_MANY_ERRORS
         duration = time.perf_counter() - start
@@ -298,69 +403,96 @@ class Orchestrator:
         logger.debug(
             f"Step {self.step_count}.\nFrom role: {self.from_role}\nTo role: {self.to_role}\nMessage: {self.message}"
         )
-        # AGENT/ENV -> USER
-        if self.from_role in [Role.AGENT, Role.ENV] and self.to_role == Role.USER:
-            user_msg, self.user_state = self.user.generate_next_message(
-                self.message, self.user_state
-            )
-            user_msg.validate()
-            if UserSimulator.is_stop(user_msg):
-                self.done = True
-                self.termination_reason = TerminationReason.USER_STOP
-            self.trajectory.append(user_msg)
-            self.message = user_msg
-            self.from_role = Role.USER
-            if user_msg.is_tool_call():
-                self.to_role = Role.ENV
+        try:
+            # AGENT/ENV -> USER
+            if self.from_role in [Role.AGENT, Role.ENV] and self.to_role == Role.USER:
+                try:
+                    user_msg, self.user_state = self.user.generate_next_message(
+                        self.message, self.user_state
+                    )
+                    user_msg.validate()
+                except Exception as e:
+                    self._mark_error(
+                        "Failed to generate/validate user message",
+                        e,
+                        fatal=True,
+                    )
+                    return
+                self._append_participant_message(user_msg)
+                if not self.done and UserSimulator.is_stop(user_msg):
+                    self.done = True
+                    self.termination_reason = TerminationReason.USER_STOP
+                self.message = user_msg
+                self.from_role = Role.USER
+                if user_msg.is_tool_call():
+                    self.to_role = Role.ENV
+                else:
+                    self.to_role = Role.AGENT
+            # USER/ENV -> AGENT
+            elif (
+                self.from_role == Role.USER or self.from_role == Role.ENV
+            ) and self.to_role == Role.AGENT:
+                try:
+                    agent_msg, self.agent_state = self.agent.generate_next_message(
+                        self.message, self.agent_state
+                    )
+                    agent_msg.validate()
+                except Exception as e:
+                    self._mark_error(
+                        "Failed to generate/validate agent message",
+                        e,
+                        fatal=True,
+                    )
+                    return
+                self._append_participant_message(agent_msg)
+                if not self.done and self.agent.is_stop(agent_msg):
+                    self.done = True
+                    self.termination_reason = TerminationReason.AGENT_STOP
+                self.message = agent_msg
+                self.from_role = Role.AGENT
+                if agent_msg.is_tool_call():
+                    self.to_role = Role.ENV
+                else:
+                    self.to_role = Role.USER
+            # AGENT/USER -> ENV
+            elif self.from_role in [Role.AGENT, Role.USER] and self.to_role == Role.ENV:
+                if not self.message.is_tool_call():
+                    self._mark_error(
+                        "Agent or User should send tool call to environment",
+                        fatal=True,
+                    )
+                    return
+                tool_msgs = []
+                for tool_call in self.message.tool_calls:
+                    tool_msg = self.environment.get_response(tool_call)
+                    tool_msgs.append(tool_msg)
+                if len(self.message.tool_calls) != len(tool_msgs):
+                    self._mark_error(
+                        "Number of tool calls and tool messages should be the same",
+                        fatal=True,
+                    )
+                    return
+                self.trajectory.extend(tool_msgs)
+                if (
+                    len(tool_msgs) > 1
+                ):  # Packaging multiple tool messages into a MultiToolMessage
+                    self.message = MultiToolMessage(
+                        role="tool",
+                        tool_messages=tool_msgs,
+                    )
+                else:
+                    self.message = tool_msgs[0]
+                self.to_role = self.from_role
+                self.from_role = Role.ENV
             else:
-                self.to_role = Role.AGENT
-        # USER/ENV -> AGENT
-        elif (
-            self.from_role == Role.USER or self.from_role == Role.ENV
-        ) and self.to_role == Role.AGENT:
-            agent_msg, self.agent_state = self.agent.generate_next_message(
-                self.message, self.agent_state
-            )
-            agent_msg.validate()
-            if self.agent.is_stop(agent_msg):
-                self.done = True
-                self.termination_reason = TerminationReason.AGENT_STOP
-            self.trajectory.append(agent_msg)
-            self.message = agent_msg
-            self.from_role = Role.AGENT
-            if agent_msg.is_tool_call():
-                self.to_role = Role.ENV
-            else:
-                self.to_role = Role.USER
-        # AGENT/USER -> ENV
-        elif self.from_role in [Role.AGENT, Role.USER] and self.to_role == Role.ENV:
-            if not self.message.is_tool_call():
-                raise ValueError("Agent or User should send tool call to environment")
-            tool_msgs = []
-            for tool_call in self.message.tool_calls:
-                tool_msg = self.environment.get_response(tool_call)
-                tool_msgs.append(tool_msg)
-            assert len(self.message.tool_calls) == len(tool_msgs), (
-                "Number of tool calls and tool messages should be the same"
-            )
-            self.trajectory.extend(tool_msgs)
-            if (
-                len(tool_msgs) > 1
-            ):  # Packaging multiple tool messages into a MultiToolMessage
-                self.message = MultiToolMessage(
-                    role="tool",
-                    tool_messages=tool_msgs,
+                self._mark_error(
+                    f"Invalid role combination. From role: {self.from_role}, To role: {self.to_role}",
+                    fatal=True,
                 )
-            else:
-                self.message = tool_msgs[0]
-            self.to_role = self.from_role
-            self.from_role = Role.ENV
-        else:
-            raise ValueError(
-                f"Invalid role combination. From role: {self.from_role}, To role: {self.to_role}"
-            )
-        self.step_count += 1
-        self.environment.sync_tools()
+                return
+        finally:
+            self.step_count += 1
+            self.environment.sync_tools()
 
     def get_trajectory(self) -> list[Message]:
         """
