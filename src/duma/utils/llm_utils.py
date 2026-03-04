@@ -318,10 +318,9 @@ def generate(
             )
         )
 
-        if openrouter_mode or (
+        if provider == "openrouter" or openrouter_mode or (
             isinstance(model, str) and model.startswith("openrouter/")
         ):
-        if provider == "openrouter":
             # Convenience: allow reusing OPENAI_API_KEY as OPENROUTER_API_KEY.
             if (
                 os.getenv("OPENROUTER_API_KEY") is None
