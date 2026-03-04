@@ -17,10 +17,12 @@ def _args(**overrides):
         "agent_llm": "gpt-4o-mini",
         "agent_llm_args": {"temperature": 0.0},
         "agent_base_url": None,
+        "agent_provider": None,
         "user": "user_simulator",
         "user_llm": "gpt-4o-mini",
         "user_llm_args": {"temperature": 0.0},
         "user_base_url": None,
+        "user_provider": None,
         "api_key_env": None,
         "local_models": False,
         "output_eval_llm": "gpt-4o-mini",
@@ -90,6 +92,7 @@ def test_build_llm_args_local_models_strips_api_credentials():
         model="gpt-4o-mini",
         base_args={"temperature": 0.2, "api_key": "k", "api_base": "https://x"},
         base_url=None,
+        provider=None,
         api_key_env=None,
         use_local=True,
     )
@@ -103,11 +106,13 @@ def test_build_llm_args_provider_specific_env_injection(monkeypatch):
         model="openrouter/openai/gpt-4o",
         base_args={},
         base_url=None,
+        provider=None,
         api_key_env=None,
         use_local=False,
     )
     assert args["api_key"] == "or-key"
-    assert args["api_base"] == "https://api.openai.com/v1"
+    assert args["api_base"] == "https://openrouter.ai/api/v1"
+    assert args["custom_llm_provider"] == "openrouter"
 
 
 def test_build_llm_args_custom_api_key_env(monkeypatch):
@@ -116,9 +121,25 @@ def test_build_llm_args_custom_api_key_env(monkeypatch):
         model="gpt-4o-mini",
         base_args={},
         base_url="https://custom.base/v1",
+        provider=None,
         api_key_env="MY_API_KEY",
         use_local=False,
     )
     assert args["api_key"] == "custom-key"
     assert args["api_base"] == "https://custom.base/v1"
+    assert args["custom_llm_provider"] == "openai"
 
+
+def test_build_llm_args_explicit_provider_for_vendor_model(monkeypatch):
+    monkeypatch.setenv("VSE_LLM_API_KEY", "vse-key")
+    args = cli._build_llm_args(
+        model="meta-llama/llama-3.3-70b-instruct",
+        base_args={},
+        base_url="https://api.vsellm.ru/v1",
+        provider="openai",
+        api_key_env="VSE_LLM_API_KEY",
+        use_local=False,
+    )
+    assert args["api_key"] == "vse-key"
+    assert args["api_base"] == "https://api.vsellm.ru/v1"
+    assert args["custom_llm_provider"] == "openai"

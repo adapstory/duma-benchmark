@@ -54,6 +54,7 @@ from result_collection import (
     load_simulation_file,
     compute_task_metrics,
 )
+from duma.utils.model_ref import normalize_model_ref
 from generate_statistical_tables import (
     generate_detailed_metrics_table_latex,
     generate_aggregated_table_latex,
@@ -64,14 +65,8 @@ from generate_statistical_tables import (
 
 
 def _model_id_for_results(model: str | None) -> str:
-    """Normalize provider-prefixed model names for filenames/reporting."""
-    if not isinstance(model, str):
-        return str(model)
-    if model.startswith("openrouter/"):
-        return model.split("/")[-1]
-    if model.startswith("openai/"):
-        return model.split("/", 1)[1]
-    return model
+    """Normalize model names to canonical vendor/model format."""
+    return normalize_model_ref(model)
 
 
 def _sanitize_model_for_filename(model: str) -> str:
@@ -79,7 +74,7 @@ def _sanitize_model_for_filename(model: str) -> str:
 
 
 def _normalize_model_name(model: str | None) -> str:
-    return _model_id_for_results(model)
+    return normalize_model_ref(model)
 
 
 def run_single_experiment(
@@ -1537,7 +1532,12 @@ def main():
     parser.add_argument(
         "--models",
         nargs="+",
-        default=["gpt-4o", "gpt-4o-mini", "gpt-5.1", "gpt-5.2"],
+        default=[
+            "openai/gpt-4o",
+            "openai/gpt-4o-mini",
+            "openai/gpt-5.1",
+            "openai/gpt-5.2",
+        ],
         help="Модели агента для тестирования",
     )
     parser.add_argument(

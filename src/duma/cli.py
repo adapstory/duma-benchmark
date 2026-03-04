@@ -20,6 +20,7 @@ from duma.config import (
 )
 from duma.data_model.simulation import RunConfig
 from duma.run import get_options, run_domain, run_domains
+from duma.utils.model_ref import infer_provider, normalize_model_ref
 
 
 def add_run_args(parser):
@@ -57,7 +58,10 @@ def add_run_args(parser):
         "--agent-llm",
         type=str,
         default=DEFAULT_LLM_AGENT,
-        help=f"The LLM to use for the agent. Default is {DEFAULT_LLM_AGENT}.",
+        help=(
+            "The model to use for the agent in vendor/model format "
+            f"(e.g. openai/gpt-4o, meta-llama/llama-3.3-70b-instruct). Default is {DEFAULT_LLM_AGENT}."
+        ),
     )
     parser.add_argument(
         "--agent-llm-args",
@@ -72,6 +76,16 @@ def add_run_args(parser):
         help="Optional base URL for the agent LLM API (overrides api_base in agent-llm-args).",
     )
     parser.add_argument(
+        "--agent-provider",
+        type=str,
+        default=None,
+        help=(
+            "Optional LiteLLM provider for agent model routing "
+            "(e.g. openai, openrouter, huggingface). "
+            "If omitted, inferred from base URL and model."
+        ),
+    )
+    parser.add_argument(
         "--user",
         type=str,
         choices=get_options().users,
@@ -82,7 +96,10 @@ def add_run_args(parser):
         "--user-llm",
         type=str,
         default=DEFAULT_LLM_USER,
-        help=f"The LLM to use for the user. Default is {DEFAULT_LLM_USER}.",
+        help=(
+            "The model to use for the user simulator in vendor/model format "
+            f"(e.g. openai/gpt-4o, qwen/qwen3-235b-a22b). Default is {DEFAULT_LLM_USER}."
+        ),
     )
     parser.add_argument(
         "--user-llm-args",
@@ -95,6 +112,16 @@ def add_run_args(parser):
         type=str,
         default=None,
         help="Optional base URL for the user LLM API (overrides api_base in user-llm-args).",
+    )
+    parser.add_argument(
+        "--user-provider",
+        type=str,
+        default=None,
+        help=(
+            "Optional LiteLLM provider for user model routing "
+            "(e.g. openai, openrouter, huggingface). "
+            "If omitted, inferred from base URL and model."
+        ),
     )
     parser.add_argument(
         "--api-key-env",
@@ -180,20 +207,30 @@ def add_run_args(parser):
     )
 
 
-def _default_api_key_env_for_model(model: str | None) -> str:
-    if not model:
+def _default_api_key_env_for_provider(provider: str | None) -> str:
+    if not provider:
         return "OPENAI_API_KEY"
-    if model.startswith("openrouter/"):
+    provider = provider.lower()
+    if provider == "openrouter":
         return "OPENROUTER_API_KEY"
-    if model.startswith("huggingface/"):
+    if provider == "huggingface":
         return "HUGGINGFACE_API_KEY"
     return "OPENAI_API_KEY"
+
+
+def _default_api_base_for_provider(provider: str) -> str:
+    if provider == "openrouter":
+        return "https://openrouter.ai/api/v1"
+    if provider == "huggingface":
+        return "https://router.huggingface.co/v1"
+    return os.getenv("OPENAI_API_BASE", "https://api.openai.com/v1")
 
 
 def _build_llm_args(
     model: str | None,
     base_args: dict,
     base_url: str | None,
+    provider: str | None,
     api_key_env: str | None,
     use_local: bool,
 ) -> dict:
@@ -205,20 +242,27 @@ def _build_llm_args(
     if use_local:
         args.pop("api_key", None)
         args.pop("api_base", None)
+        args.pop("custom_llm_provider", None)
         return args
+
+    inferred_provider = infer_provider(
+        model=model,
+        api_base=base_url or args.get("api_base"),
+        explicit_provider=provider,
+    )
 
     if base_url:
         args["api_base"] = base_url
     else:
-        args.setdefault(
-            "api_base",
-            os.getenv("OPENAI_API_BASE", "https://api.openai.com/v1"),
-        )
+        args.setdefault("api_base", _default_api_base_for_provider(inferred_provider))
 
-    env_name = api_key_env or _default_api_key_env_for_model(model)
+    env_name = api_key_env or _default_api_key_env_for_provider(inferred_provider)
     api_key = os.getenv(env_name)
     if api_key:
         args.setdefault("api_key", api_key)
+
+    # Keep provider explicit for LiteLLM routing; model remains canonical vendor/model.
+    args.setdefault("custom_llm_provider", inferred_provider)
 
     return args
 
@@ -300,6 +344,7 @@ def run_command(args):
         args.agent_llm,
         args.agent_llm_args,
         args.agent_base_url,
+        args.agent_provider,
         args.api_key_env,
         args.local_models,
     )
@@ -307,9 +352,12 @@ def run_command(args):
         args.user_llm,
         args.user_llm_args,
         args.user_base_url,
+        args.user_provider,
         args.api_key_env,
         args.local_models,
     )
+    agent_model = normalize_model_ref(args.agent_llm)
+    user_model = normalize_model_ref(args.user_llm)
 
     config = RunConfig(
         domain=args.domain or "",  # Will be ignored if domains is provided
@@ -318,10 +366,10 @@ def run_command(args):
         task_ids=args.task_ids,
         num_tasks=args.num_tasks,
         agent=args.agent,
-        llm_agent=args.agent_llm,
+        llm_agent=agent_model,
         llm_args_agent=agent_llm_args,
         user=args.user,
-        llm_user=args.user_llm,
+        llm_user=user_model,
         llm_args_user=user_llm_args,
         llm_output_eval=args.output_eval_llm,
         llm_args_output_eval=args.output_eval_llm_args,
