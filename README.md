@@ -36,7 +36,6 @@ Each domain specifies:
 Domains are:
 - `collab` (cross-agent poisoning)
 - `crm_leak` (customer data leakage)
-- `mail_rag_nexport` (mailbox data exfiltration)
 - `mail_rag_phishing` (phishing via RAG)
 - `infra_loadshed` (resource overload / denial-of-wallet)
 - `output_handling` (improper output filtering)

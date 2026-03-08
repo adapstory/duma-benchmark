@@ -18,12 +18,6 @@ from duma.domains.crm_leak.environment import (
     get_environment as crm_leak_domain_get_environment,
 )
 from duma.domains.crm_leak.environment import get_tasks as crm_leak_domain_get_tasks
-from duma.domains.mail_rag_nexport.environment import (
-    get_environment as mail_rag_nexport_domain_get_environment,
-)
-from duma.domains.mail_rag_nexport.environment import (
-    get_tasks as mail_rag_nexport_domain_get_tasks,
-)
 from duma.domains.mail_rag_phishing.environment import (
     get_environment as mail_rag_phishing_domain_get_environment,
 )
@@ -202,8 +196,6 @@ try:
     registry.register_tasks(collab_domain_get_tasks, "collab")
     registry.register_domain(crm_leak_domain_get_environment, "crm_leak")
     registry.register_tasks(crm_leak_domain_get_tasks, "crm_leak")
-    registry.register_domain(mail_rag_nexport_domain_get_environment, "mail_rag_nexport")
-    registry.register_tasks(mail_rag_nexport_domain_get_tasks, "mail_rag_nexport")
     registry.register_domain(mail_rag_phishing_domain_get_environment, "mail_rag_phishing")
     registry.register_tasks(mail_rag_phishing_domain_get_tasks, "mail_rag_phishing")
     registry.register_domain(infra_loadshed_get_environment, "infra_loadshed")
