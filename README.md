@@ -1,240 +1,162 @@
-# DUMA-Bench: Dual-Control Multi Agent systems vulnerabilities benchmark
+# DUMA-Bench: Dual-Control Multi-Agent Benchmark for Evaluating LLM Agent Security
 
 [![python](https://img.shields.io/badge/Python-3.10%2B-blue.svg?style=flat&logo=python&logoColor=white)](https://www.python.org)
 [![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
 [![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
 
+**DUMA-Bench** is a benchmark and evaluation protocol for measuring the security of LLM-based agents under **dual-control interaction** — a setting where both the agent and the user can influence the shared environment state through messages and tool calls.
+
+Most existing security benchmarks evaluate agents under a passive-user assumption: the model receives a fixed prompt and produces a single response. DUMA-Bench instead models realistic agent deployments where users actively participate in multi-turn interactions, creating additional pathways for adversarial manipulation.
 
 <div align="center">
-<img src="figs/attaks.jpg" width="95%" alt="System Overview"><br>
-<em>Figure 1: Duma-bench allows users to interact with the agent and the environment</em>
+<img src="figs/attaks.jpg" width="95%" alt="Attack scenarios in DUMA-Bench: RAG Poisoning, Collab Attack, and Output Handling Attack"><br>
+<em>Figure 1: Three attack scenarios in DUMA-Bench. Each domain simulates a realistic workflow where adversarial content can propagate through retrieved context, cross-agent communication, or user interaction.</em>
 </div>
+
+## Evaluation Regimes
+
+DUMA-Bench supports two evaluation regimes:
+
+| Regime | Description |
+|--------|-------------|
+| **Solo** (passive-user) | The agent interacts directly with the environment without an active user. Approximates traditional single-controller benchmarks. |
+| **Dual-control** | The agent and a user simulator jointly shape the interaction trajectory through multi-turn communication and tool-mediated actions. |
 
 <div align="center">
-<img src="figs/diagram.jpg" width="95%" alt="Trajectory"><br>
-<em>Figure 2: Trajectory of a conversation between an agent and a user</em>
+<img src="figs/traj.png" width="95%" alt="Interaction trajectory example"><br>
+<em>Figure 2: Example interaction trajectories. Left: solo mode (user reads/writes via tools). Right: dual-control mode (agent and user both influence the environment).</em>
 </div>
 
-## 🆕 What's New
-- Added three new security domains:
-  - `mktg_phishing` (campaign phishing pressure / external domain approval gates)
-  - `auth_spoof_support` (identity spoofing and privileged-action auth bypass)
-  - `tool_shadow_poison` (tool shadowing / unsigned export tool misuse)
-- Added full task sets, policies, and deterministic ENV assertions for all three domains.
-- Added domain tests under `tests/test_domains/` for tool behavior and environment wiring.
+## Security Domains
 
-## Overview
+DUMA-Bench evaluates agents across eight security domains, each embedding adversarial content within a realistic workflow:
 
-DUMA-bench implements a simulation framework for evaluating customer service agents across various domains.
+| Domain | Vulnerability Class | Description |
+|--------|-------------------|-------------|
+| `mail_rag_phishing` | RAG poisoning | Malicious instructions injected into retrieved email context |
+| `collab` | Cross-agent manipulation | Poisoned collaborator messages influence agent behavior |
+| `output_handling` | Unsafe output generation | Agent outputs trigger downstream vulnerabilities (XSS, code injection) |
+| `crm_leak` | Data oversharing | Agent leaks protected customer data from trusted documents |
+| `infra_loadshed` | Infrastructure manipulation | Social engineering leads to resource abuse or denial-of-wallet |
+| `mktg_phishing` | Phishing campaign abuse | Pressure to approve campaigns with unapproved external domains |
+| `auth_spoof_support` | Identity spoofing | Impersonation attempts to bypass authentication in support workflows |
+| `tool_shadow_poison` | Tool shadowing | Exploiting misleading or untrusted tool interfaces |
 
-Each domain specifies:
-- a policy that the agent must follow
-- a set of tools that the agent can use
-- a set of tasks to evaluate the agent's performance
-- Optionally: A set of tools that the user simulator can use
+Each domain provides:
+- A **policy** (`policy.md`) that the agent must follow
+- A set of **agent tools** for interacting with the environment
+- A set of **tasks** (`tasks.json`) with adversarial scenarios and evaluation assertions
+- Optionally: **user tools** that allow the user simulator to act on the environment
 
-Domains are:
-- `collab` (cross-agent poisoning)
-- `crm_leak` (customer data leakage)
-- `mail_rag_phishing` (phishing via RAG)
-- `infra_loadshed` (resource overload / denial-of-wallet)
-- `output_handling` (improper output filtering)
-- `mktg_phishing` (marketing phishing pressure and unapproved-domain blocking)
-- `auth_spoof_support` (support-side identity spoofing and auth bypass resistance)
-- `tool_shadow_poison` (tool-shadow poisoning and signed-tool enforcement)
+Detailed domain documentation: [`src/duma/domains/README.md`](src/duma/domains/README.md)
 
-All the information that an agent developer needs to build an agent for a domain can be accessed through the domain's API docs. See [View domain documentation](#view-domain-documentation) for more details.
+## Evaluation Metrics
 
-## Authors ([ai-securitylab ITMO](https://github.com/ai-security-lab-itmo))
-* [Aleksandrov Ivan](https://github.com/Ivanich-spb)
-* [Kochnev German](https://github.com/germanKoch)
-* [Rogoza Yaroslav](https://github.com/123yaroslav)
-* [Kalimanova Anastasia](https://github.com/katimanova)
+| Metric | Description |
+|--------|-------------|
+| **ASR** (Attack Success Rate) | Fraction of episodes where the adversarial objective is achieved |
+| **pass@k** | Probability that *all* k independent trials succeed (stricter as k increases) |
+
+Each task defines binary **assertions** evaluated after interaction completes:
+- **State assertions**: deterministic checks on post-execution environment state (e.g., was an unauthorized refund issued?)
+- **Communication assertions**: LLM-judge checks on agent responses (e.g., was protected data disclosed in text?)
+
+A task passes only when *all* assertions of *all* types are satisfied.
 
 ## Installation
 
-1. Clone the repository:
+**Requirements:** Python 3.10+
+
 ```bash
 git clone https://github.com/ai-security-lab-itmo/duma-benchmark.git
 cd duma-benchmark
-```
-
-2. Create a new environment (optional)
-
-DUMA-benchmark requires Python 3.10 or higher. You may create and activate a new environment:
-
-```bash
-python -m venv .venv
-source .venv/bin/activate
-```
-
-3. Install DUMA
-
-```bash
+python -m venv .venv && source .venv/bin/activate
 pip install -e .
 ```
 
-This will enable you to run the `duma` command.
-
-**Note:** If you use `pip install .` (without `-e`), you'll need to set the `DUMA_DATA_DIR` environment variable to point to your data directory:
-
-```bash
-export DUMA_DATA_DIR=/path/to/your/duma-bench/data
-```
-
-**Check your data directory setup:**
-
-After installation, you can verify that your data directory is correctly configured by running:
-
+Verify the installation:
 ```bash
 duma check-data
 ```
 
-This command will check if the data directory exists and print instructions if it is missing.
-
-To remove all the generated files and the virtual environment, run:
-```bash
-make clean
-```
-
 ## Quick Start
 
-### Setup LLM API keys
+### 1. Configure API keys
 
-We use [LiteLLM](https://github.com/BerriAI/litellm) to manage LLM APIs, so you can use any LLM provider supported by LiteLLM.
+DUMA-Bench uses [LiteLLM](https://github.com/BerriAI/litellm) for multi-provider LLM access. Copy `.env.example` to `.env` and add your API keys.
 
-To provide your API keys, copy `.env.example` as `.env` and edit it to include your API keys.
-
-### Run agent evaluation
-
-To run a test evaluation on only 5 tasks with 1 trial per task, run:
+### 2. Run an evaluation
 
 ```bash
-duma run \ 
---domain collab \
---agent-llm gpt-4.1 \
---user-llm gpt-4.1 \
---num-trials 1 \
---num-tasks 5
-```
-
-Results will be saved in `data/duma/simulations/`.
-
-## Command Line Interface
-
-The `duma` command provides a unified interface for all functionality:
-
-### Running Benchmark 
-```bash
-duma run \
-  --domain <domain> \
-  --agent-llm <llm_name> \
-  --user-llm <llm_name> \
-  --num-trials <trial_count> \
-  --task-ids <task_ids> \
-  --max-concurrency <concurrent_sims> \
-  ...
-```
-
-### Agent Modes
-
-The benchmark supports three built-in agent modes:
-
-- `llm_agent` (default): regular interactive mode with simulated user (`user_simulator`).
-- `llm_agent_gt`: ground-truth helper mode for debugging/validation. The agent receives expected task actions in its system prompt. Use this as a diagnostic baseline, not as a fair production benchmark.
-- `llm_agent_solo`: no-user mode. The agent works directly with tools and finishes by calling `done`; this mode must be paired with `--user dummy_user`.
-
-Examples:
-
-```bash
-# Default interactive benchmark mode
+# Dual-control evaluation (default)
 duma run \
   --domain collab \
-  --agent llm_agent \
-  --user user_simulator \
   --agent-llm gpt-4.1 \
-  --user-llm gpt-4.1
-```
+  --user-llm gpt-4.1 \
+  --num-trials 5 \
+  --num-tasks 5
 
-```bash
-# Ground-truth diagnostic mode
-duma run \
-  --domain collab \
-  --agent llm_agent_gt \
-  --user user_simulator \
-  --agent-llm gpt-4.1 \
-  --user-llm gpt-4.1
-```
-
-```bash
-# No-user (solo) mode
+# Solo (passive-user) evaluation
 duma run \
   --domain collab \
   --agent llm_agent_solo \
   --user dummy_user \
   --agent-llm gpt-4.1
+
+# Run multiple domains
+duma run \
+  --domains collab infra_loadshed output_handling \
+  --agent-llm gpt-4.1 \
+  --user-llm gpt-4.1 \
+  --max-concurrency 2
 ```
 
-### Viewing Results
+Results are saved in `data/duma/simulations/`.
+
+### 3. Browse results
+
 ```bash
 duma view
 ```
-This tool allows you to:
-- Browse simulation files (in `data/duma/simulations/`)
-- View agent performance metrics
-- View a particular simulation
-- View task details
 
-### View domain documentation
+### 4. View domain policy and API docs
+
 ```bash
-duma domain <domain>
+duma domain <domain_name>
+# Then visit http://127.0.0.1:8004/redoc
 ```
-Visit http://127.0.0.1:8004/redoc to see the domain policy and API documentation.
 
-### Run multiple domains with custom endpoints
-```bash
-duma run \
-  --domains collab infra_loadshed output_handling \
-  --agent-llm gpt-4o-mini \
-  --user-llm gpt-4o-mini \
-  --api-key-env ALTERNATIVE_API_KEY \
-  --agent-base-url https://api.openai.com/v1 \
-  --max-concurrency 2
-```
-Use `--local-models` to skip API keys for local providers, and `--user-base-url`/`--agent-base-url` to point to custom endpoints.
+## Agent Modes
 
-![domain_viewer1](figs/domain_viewer.png)
-
-### Check data configuration
-```bash
-duma check-data
-```
-This command checks if your data directory is properly configured and all required files are present.
-
-## Experiments
-
-### Experimental Code Directory
-
-The `@experiments/` directory contains experimental features and research code that extends beyond the core duma benchmark. This directory is designed for community contributions of innovative approaches, prototypes, and new features that are not part of the core evaluation framework.
-
-- **Purpose**: Research code and experimental features
-- **Location**: `src/experiments/`
-- **Usage**: Each experimental component has its own README with documentation
-- **Status**: Experimental code is provided as-is and may not be fully tested or supported
-
-For more details, see the [experiments README](src/experiments/README.md).
-
-## Domains
-
-For all the details see the domains [README](src/duma/domains/README.md).
-Additional attack-focused summaries and runnable examples are in [docs/new_domains.md](docs/new_domains.md).
+| Mode | Agent flag | User flag | Description |
+|------|-----------|-----------|-------------|
+| **Dual-control** (default) | `--agent llm_agent` | `--user user_simulator` | Agent + active user simulator |
+| **Solo** | `--agent llm_agent_solo` | `--user dummy_user` | Agent only, no active user |
+| **Ground-truth** | `--agent llm_agent_gt` | `--user user_simulator` | Diagnostic mode: agent receives expected actions in system prompt |
 
 ## Results
 
+### Solo vs. Dual-Control Comparison
 
-**Hypothesis 1**: With fixed agent and user temperatures, increasing the number of runs *k* reduces the variance of the pass@k metric, but does not guarantee monotonic change in ASR.
+| Mode | Trials | pass@1 | ASR |
+|------|--------|--------|-----|
+| Solo (passive-user) | 1960 | 0.746 | 0.254 |
+| Dual-control | 1960 | 0.597 | 0.403 |
 
-**Hypothesis 2**: Changes in non-attacking user requests cause changes in ASR with fixed agent temperature.
+### Domain-Level ASR
+
+| Domain | Solo ASR | Dual ASR | Delta |
+|--------|----------|----------|-------|
+| `mktg_phishing` | 0.006 | 0.607 | **+0.601** |
+| `collab` | 0.027 | 0.241 | **+0.214** |
+| `crm_leak` | 0.040 | 0.241 | **+0.201** |
+| `tool_shadow_poison` | 0.095 | 0.256 | +0.161 |
+| `auth_spoof_support` | 0.024 | 0.161 | +0.137 |
+| `output_handling` | 0.393 | 0.476 | +0.083 |
+| `infra_loadshed` | 0.473 | 0.533 | +0.060 |
+| `mail_rag_phishing` | 0.594 | 0.571 | -0.023 |
+
+### Effect of User Simulator Temperature
 
 <p align="center">
   <img src="figs/res_t0_pass1.svg" width="45%"/>
@@ -245,98 +167,72 @@ Additional attack-focused summaries and runnable examples are in [docs/new_domai
   <img src="figs/res_t0_pass4.svg" width="45%"/>
 </p>
 
-
-**Hypothesis 3**: The GPT-4o model performed better in the RAG-poisoning domain compared to the more expensive GPT-4.1 and Sonnet-4.5, but proved unstable when increasing *k*. GPT-3.5-turbo shows the most stable results when varying T-user.
+### Model-Level Comparison
 
 <p align="center">
   <img src="figs/pass1.svg" width="45%"/>
   <img src="figs/pass4.svg" width="45%"/>
 </p>
 
-### Basics
+## Project Structure
 
-- Code is located in `src/duma/domains/`
-- Data is located in `data/duma/domains/`
-- Each domain has its own configuration and task definitions
+```
+duma-benchmark/
+├── src/duma/
+│   ├── orchestrator/    # Interaction loop between agent, user, environment
+│   ├── agent/           # LLM agent implementations
+│   ├── user/            # User simulator
+│   ├── environment/     # Environment state, policy, tools
+│   ├── evaluator/       # Multi-stage evaluation pipeline
+│   ├── domains/         # Domain implementations (8 security domains)
+│   ├── config.py        # Default LLM models, limits, caching
+│   └── registry.py      # Domain/agent/user registration
+├── data/duma/
+│   ├── domains/         # Domain data (policies, tasks, databases)
+│   └── simulations/     # Evaluation results
+├── tests/               # Test suite
+└── scripts/             # Utility scripts
+```
 
-#### View domain-specific policy and API docs:
-Run the following command to see the domain policy and API documentation.
+## Testing
+
 ```bash
-duma domain <domain>
+make test                            # Run full test suite
+pytest tests/test_domains/collab     # Run tests for a single domain
 ```
 
-Then visit http://127.0.0.1:8004/redoc
+## Configuration
 
-### Environment CLI (beta)
+See [`src/duma/config.py`](src/duma/config.py) for default settings.
 
-An interactive command-line interface for directly querying and testing domain environments. Features:
-- Interactive query interface with domain-specific tools
-- Support for multiple domains (collab, infra_loadshed, crm_leak, mail_rag_*, output_handling)
-- Session management with history
-
-To use:
+**LLM call caching** (optional): requires Redis.
 ```bash
-make env-cli
+# In config.py or .env:
+LLM_CACHE_ENABLED=True
 ```
 
-Available commands:
-- `:q` - quit the program
-- `:d` - change domain
-- `:n` - start new session (clears history)
+## Extending DUMA-Bench
 
-Example usage:
-```bash
-$ make env-cli
+### Adding a new domain
 
-Welcome to the Environment CLI!
-Connected to collab domain.
+1. Create `src/duma/domains/<domain>/` with `data_model.py`, `tools.py`, `environment.py`
+2. Add data files to `data/duma/domains/<domain>/` (`policy.md`, `tasks.json`, `db.json`)
+3. Register in `src/duma/registry.py`
+4. Add tests to `tests/test_domains/<domain>/`
 
-Query (:n new session, :d change domain, :q quit)> Please summarize the ticket and explain why we cannot share raw logs.
-Assistant: I can inspect the ticket context and collaborator notes first.
-[Tool outputs and policy-aligned response will appear here]
-```
+See [`src/duma/domains/README.md`](src/duma/domains/README.md) for details.
 
-The Environment CLI is useful for:
-- Testing domain tools and queries
-- Debugging environment responses
-- Exploring available domain functionality
-- Quick domain interaction without starting the full server stack
+### Evaluating your own agent
 
+See the [agent developer guide](src/duma/agent/README.md).
 
-## Run tests
-To run the test suite use the command
+## Authors
 
-```sh
-make test
-```
+[AI Security Lab, ITMO University](https://github.com/ai-security-lab-itmo)
 
-## Config
-
-To configure the framework, see the [config](src/duma/config.py) file.
-
-### LLM Calls caching
-LLM call caching is disabled by default.
-
-To enable LLM calls caching:
-    - Make sure `redis` is running.
-    - Update the redis config in `config.py` if necessary.
-    - Set `LLM_CACHE_ENABLED` to `True` in `config.py`
-
-
-## Evaluate Your Own Agent
-For local or remote agent evaluation, see our [agent developer guide](src/duma/agent/README.md).
-
-## Contributing
-
-We welcome contributions to DUMA-bench! Whether you're fixing bugs, adding new features, creating new domains, or contributing experimental research code, please see our [Contributing Guide](CONTRIBUTING.md) for detailed guidelines on:
-
-- **Opening issues** before starting work
-- **Branch naming conventions** and development workflow  
-- **Code quality standards** and testing requirements
-- **Pull request guidelines** for clean, reviewable contributions
-- **Domain and experimental contributions** specific guidelines
-
-For experimental features and research code, check out the [`@experiments/`](src/experiments/) directory.
+* [Ivan Aleksandrov](https://github.com/Ivanich-spb)
+* [German Kochnev](https://github.com/germanKoch)
+* [Yaroslav Rogoza](https://github.com/123yaroslav)
 
 ## Orchestration Sequence Diagram
 
@@ -378,3 +274,6 @@ sequenceDiagram
     EV->>O: Calculate Resilience Score & Metrics
 
 ```
+## License
+
+See [LICENSE](LICENSE).
