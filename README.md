@@ -23,8 +23,10 @@ DUMA-Bench supports two evaluation regimes:
 | **Dual-control** | The agent and a user simulator jointly shape the interaction trajectory through multi-turn communication and tool-mediated actions. |
 
 <div align="center">
-<img src="figs/traj.png" width="95%" alt="Interaction trajectory example"><br>
-<em>Figure 2: Example interaction trajectories. Left: solo mode (user reads/writes via tools). Right: dual-control mode (agent and user both influence the environment).</em>
+<img src="figs/solo_control.png" width="100%" alt="Interaction trajectory example"><br>
+<em>Figure 2: Example interaction trajectories. Solo mode (agent influences the environment).</em>
+<img src="figs/dual_control.png" width="100%" alt="Interaction trajectory example"><br>
+<em>Figure 3: Example interaction trajectories. Dual-control mode (agent and user both influence the environment).</em>
 </div>
 
 ## Security Domains
