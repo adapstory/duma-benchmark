@@ -226,14 +226,6 @@ See [`src/duma/domains/README.md`](src/duma/domains/README.md) for details.
 
 See the [agent developer guide](src/duma/agent/README.md).
 
-## Authors
-
-[AI Security Lab, ITMO University](https://github.com/ai-security-lab-itmo)
-
-* [Ivan Aleksandrov](https://github.com/Ivanich-spb)
-* [German Kochnev](https://github.com/germanKoch)
-* [Yaroslav Rogoza](https://github.com/123yaroslav)
-
 ## Orchestration Sequence Diagram
 
 ```mermaid
