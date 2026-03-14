@@ -57,7 +57,7 @@ Detailed domain documentation: [`src/duma/domains/README.md`](src/duma/domains/R
 | Metric | Description |
 |--------|-------------|
 | **ASR** (Attack Success Rate) | Fraction of episodes where the adversarial objective is achieved |
-| **pass@k** | Probability that *all* k independent trials succeed (stricter as k increases) |
+| **pass^k** | Probability that *all* k independent trials succeed (stricter as k increases) |
 
 Each task defines binary **assertions** evaluated after interaction completes:
 - **State assertions**: deterministic checks on post-execution environment state (e.g., was an unauthorized refund issued?)
@@ -140,7 +140,7 @@ duma domain <domain_name>
 
 ### Solo vs. Dual-Control Comparison
 
-| Mode | Trials | pass@1 | ASR |
+| Mode | Trials | pass^1 | ASR |
 |------|--------|--------|-----|
 | Solo (passive-user) | 1960 | 0.746 | 0.254 |
 | Dual-control | 1960 | 0.597 | 0.403 |
@@ -158,16 +158,16 @@ duma domain <domain_name>
 | `infra_loadshed` | 0.473 | 0.533 | +0.060 |
 | `mail_rag_phishing` | 0.594 | 0.571 | -0.023 |
 
-### Pass@1 by Model
+### Pass^1 by Model
 
 <div align="center">
-<img src="figs/pass1_by_model.png" width="95%" alt="Pass@1 by Model: solo vs dual-control comparison across 14 LLMs"><br>
-<em>Figure 4: Pass@1 scores for each model under solo and dual-control regimes.</em>
+<img src="figs/pass1_by_model.png" width="95%" alt="Pass^1 by Model: solo vs dual-control comparison across 14 LLMs"><br>
+<em>Figure 4: Pass^1 scores for each model under solo and dual-control regimes.</em>
 </div>
 
-### Pass@k by Domain (Dual-Control, All Temperatures)
+### Pass^k by Domain (Dual-Control, All Temperatures)
 
-| Domain | pass@1 | pass@2 | pass@3 | pass@4 | pass@5 |
+| Domain | pass^1 | pass^2 | pass^3 | pass^4 | pass^5 |
 |--------|--------|--------|--------|--------|--------|
 | `auth_spoof_support` | 0.946 | 0.916 | 0.896 | 0.881 | 0.870 |
 | `collab` | 0.912 | 0.867 | 0.835 | 0.812 | 0.794 |
@@ -179,14 +179,14 @@ duma domain <domain_name>
 | `tool_shadow_poison` | 0.926 | 0.879 | 0.847 | 0.826 | 0.811 |
 | **ALL** | **0.722** | **0.666** | **0.633** | **0.611** | **0.596** |
 
-### Pass@k by User Temperature (Dual-Control)
+### Pass^k by User Temperature (Dual-Control)
 
 | | T=0.0 | T=0.5 | T=1.0 |
 |--------|-------|-------|-------|
-| pass@1 | 0.716 | 0.719 | 0.730 |
-| pass@2 | 0.661 | 0.662 | 0.675 |
-| pass@3 | 0.630 | 0.628 | 0.642 |
-| pass@4 | 0.609 | 0.605 | 0.620 |
+| pass^1 | 0.716 | 0.719 | 0.730 |
+| pass^2 | 0.661 | 0.662 | 0.675 |
+| pass^3 | 0.630 | 0.628 | 0.642 |
+| pass^4 | 0.609 | 0.605 | 0.620 |
 
 ## Project Structure
 
