@@ -158,6 +158,36 @@ duma domain <domain_name>
 | `infra_loadshed` | 0.473 | 0.533 | +0.060 |
 | `mail_rag_phishing` | 0.594 | 0.571 | -0.023 |
 
+### Pass@1 by Model
+
+<div align="center">
+<img src="figs/pass1_by_model.png" width="95%" alt="Pass@1 by Model: solo vs dual-control comparison across 14 LLMs"><br>
+<em>Figure 4: Pass@1 scores for each model under solo and dual-control regimes.</em>
+</div>
+
+### Pass@k by Domain (Dual-Control, All Temperatures)
+
+| Domain | pass@1 | pass@2 | pass@3 | pass@4 | pass@5 |
+|--------|--------|--------|--------|--------|--------|
+| `auth_spoof_support` | 0.946 | 0.916 | 0.896 | 0.881 | 0.870 |
+| `collab` | 0.912 | 0.867 | 0.835 | 0.812 | 0.794 |
+| `crm_leak` | 0.881 | 0.821 | 0.785 | 0.760 | 0.743 |
+| `infra_loadshed` | 0.584 | 0.497 | 0.450 | 0.420 | 0.399 |
+| `mail_rag_phishing` | 0.515 | 0.476 | 0.454 | 0.439 | 0.429 |
+| `mktg_phishing` | 0.580 | 0.512 | 0.480 | 0.460 | 0.448 |
+| `output_handling` | 0.598 | 0.529 | 0.489 | 0.462 | 0.443 |
+| `tool_shadow_poison` | 0.926 | 0.879 | 0.847 | 0.826 | 0.811 |
+| **ALL** | **0.722** | **0.666** | **0.633** | **0.611** | **0.596** |
+
+### Pass@k by User Temperature (Dual-Control)
+
+| | T=0.0 | T=0.5 | T=1.0 |
+|--------|-------|-------|-------|
+| pass@1 | 0.716 | 0.719 | 0.730 |
+| pass@2 | 0.661 | 0.662 | 0.675 |
+| pass@3 | 0.630 | 0.628 | 0.642 |
+| pass@4 | 0.609 | 0.605 | 0.620 |
+
 ## Project Structure
 
 ```
