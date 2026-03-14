@@ -158,24 +158,6 @@ duma domain <domain_name>
 | `infra_loadshed` | 0.473 | 0.533 | +0.060 |
 | `mail_rag_phishing` | 0.594 | 0.571 | -0.023 |
 
-### Effect of User Simulator Temperature
-
-<p align="center">
-  <img src="figs/res_t0_pass1.svg" width="45%"/>
-  <img src="figs/res_t05_pass1.svg" width="45%"/>
-</p>
-<p align="center">
-  <img src="figs/res_t1_pass1.svg" width="45%"/>
-  <img src="figs/res_t0_pass4.svg" width="45%"/>
-</p>
-
-### Model-Level Comparison
-
-<p align="center">
-  <img src="figs/pass1.svg" width="45%"/>
-  <img src="figs/pass4.svg" width="45%"/>
-</p>
-
 ## Project Structure
 
 ```
