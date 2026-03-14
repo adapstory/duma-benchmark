@@ -74,7 +74,7 @@ def test_generate_routes_vendor_model_with_openai_provider(monkeypatch):
     response = llm_utils.generate(
         model="meta-llama/llama-3.3-70b-instruct",
         messages=_messages(),
-        api_base="https://api.vsellm.ru/v1",
+        api_base="https://api.example.com/v1",
         custom_llm_provider="openai",
     )
 
@@ -123,7 +123,7 @@ def test_generate_falls_back_to_auto_tool_choice_on_required_unsupported(monkeyp
         messages=_messages(),
         tools=[_dummy_tool()],
         tool_choice="required",
-        api_base="https://api.vsellm.ru/v1",
+        api_base="https://api.example.com/v1",
         custom_llm_provider="openai",
     )
 
@@ -149,7 +149,7 @@ def test_generate_does_not_retry_on_unrelated_error(monkeypatch):
             messages=_messages(),
             tools=[_dummy_tool()],
             tool_choice="required",
-            api_base="https://api.vsellm.ru/v1",
+            api_base="https://api.example.com/v1",
             custom_llm_provider="openai",
         )
 

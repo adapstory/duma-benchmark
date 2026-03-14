@@ -1,4 +1,4 @@
-# Copyright Sierra
+# Copyright Anonymous
 
 import json
 import textwrap

@@ -129,15 +129,15 @@ def test_build_llm_args_custom_api_key_env(monkeypatch):
 
 
 def test_build_llm_args_explicit_provider_for_vendor_model(monkeypatch):
-    monkeypatch.setenv("VSE_LLM_API_KEY", "vse-key")
+    monkeypatch.setenv("CUSTOM_API_KEY", "test-key")
     args = cli._build_llm_args(
         model="meta-llama/llama-3.3-70b-instruct",
         base_args={},
-        base_url="https://api.vsellm.ru/v1",
+        base_url="https://api.example.com/v1",
         provider="openai",
-        api_key_env="VSE_LLM_API_KEY",
+        api_key_env="CUSTOM_API_KEY",
         use_local=False,
     )
-    assert args["api_key"] == "vse-key"
-    assert args["api_base"] == "https://api.vsellm.ru/v1"
+    assert args["api_key"] == "test-key"
+    assert args["api_base"] == "https://api.example.com/v1"
     assert args["custom_llm_provider"] == "openai"

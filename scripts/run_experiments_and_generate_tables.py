@@ -557,13 +557,13 @@ def main():
         "--agent-base-url",
         type=str,
         default=None,
-        help="Base URL for agent LLM provider (e.g. https://api.vsellm.ru/v1)",
+        help="Base URL for agent LLM provider (e.g. https://api.openai.com/v1)",
     )
     parser.add_argument(
         "--api-key-env",
         type=str,
         default=None,
-        help="Environment variable name for API key (e.g. VSE_LLM_API_KEY)",
+        help="Environment variable name for API key (e.g. OPENAI_API_KEY)",
     )
 
     args = parser.parse_args()

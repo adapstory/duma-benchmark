@@ -1,4 +1,4 @@
-# Copyright Sierra
+# Copyright Anonymous
 
 import uvicorn
 from fastapi import FastAPI, HTTPException

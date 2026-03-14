@@ -1,1 +1,1 @@
-# Copyright Sierra
+# Copyright Anonymous

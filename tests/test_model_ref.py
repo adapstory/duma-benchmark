@@ -28,7 +28,7 @@ def test_normalize_model_ref_vendor_model_is_stable():
 def test_infer_provider_prefers_explicit_provider():
     provider = infer_provider(
         model="meta-llama/llama-3.3-70b-instruct",
-        api_base="https://api.vsellm.ru/v1",
+        api_base="https://api.example.com/v1",
         explicit_provider="openai",
     )
     assert provider == "openai"

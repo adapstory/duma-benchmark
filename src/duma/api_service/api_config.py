@@ -1,4 +1,4 @@
-# Copyright Sierra
+# Copyright Anonymous
 
 # Server binding and timeouts
 bind = ["0.0.0.0:8000"]
