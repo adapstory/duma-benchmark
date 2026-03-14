@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
-Автоматический запуск экспериментов.
+Automatic experiment execution.
 
-Этот скрипт запускает все эксперименты и сохраняет файлы симуляций.
+This script runs all experiments and saves the simulation files.
 """
 
 import json
@@ -58,24 +58,24 @@ def run_all_experiments(
     num_trials: int = 10,
     max_concurrency: int = 3,
     run_dir_name: str = "",  # Subdirectory name under simulations/ (e.g. "run_20260304_143000")
-    parallel_experiments: int = 4,  # Количество параллельных экспериментов
-    force_rerun: bool = False,  # Принудительно перезапустить все эксперименты
-    user_llm: Optional[str] = None,  # Модель для симуляции пользователя
-    solo: bool = False,  # Режим solo (агент без пользователя)
-    agent_base_url: Optional[str] = None,  # Base URL для провайдера LLM
-    api_key_env: Optional[str] = None,  # Имя переменной окружения для API ключа
-    duma_max_concurrency: int = 1,  # Внутренняя параллельность duma run
-    agent_temperature: float = 0.0,  # Фиксированная температура агента
+    parallel_experiments: int = 4,  # Number of parallel experiments
+    force_rerun: bool = False,  # Force rerun all experiments
+    user_llm: Optional[str] = None,  # Model for user simulation
+    solo: bool = False,  # Solo mode (agent without user)
+    agent_base_url: Optional[str] = None,  # Base URL for LLM provider
+    api_key_env: Optional[str] = None,  # Environment variable name for API key
+    duma_max_concurrency: int = 1,  # Internal duma run parallelism
+    agent_temperature: float = 0.0,  # Fixed agent temperature
 ) -> Path:
     """
-    Запустить все эксперименты.
+    Run all experiments.
 
     Args:
-        models: Список моделей ['gpt-4o', 'gpt-4o-mini', 'gpt-5.1', 'gpt-5.2']
-        temperatures: Список температур [0.0, 0.5, 1.0]
-        domains: Словарь {domain: [task_ids]}
-        num_trials: Количество прогонов на конфигурацию
-        max_concurrency: Максимальное количество параллельных запусков
+        models: List of models ['gpt-4o', 'gpt-4o-mini', 'gpt-5.1', 'gpt-5.2']
+        temperatures: List of temperatures [0.0, 0.5, 1.0]
+        domains: Dictionary {domain: [task_ids]}
+        num_trials: Number of runs per configuration
+        max_concurrency: Maximum number of parallel runs
         run_dir_name: Subdirectory name under simulations/ (e.g. "run_20260304_143000")
 
     Returns:
@@ -86,23 +86,23 @@ def run_all_experiments(
     if duma_max_concurrency <= 0:
         raise ValueError("duma_max_concurrency must be > 0")
 
-    # duma сохраняет файлы в data/duma/simulations/ автоматически
-    # --save-to принимает имя файла БЕЗ расширения (supports subdirectory paths)
+    # duma saves files to data/duma/simulations/ automatically
+    # --save-to accepts a filename WITHOUT extension (supports subdirectory paths)
     from duma.utils.utils import DATA_DIR
 
     actual_output_dir = DATA_DIR / "simulations" / run_dir_name
     actual_output_dir.mkdir(parents=True, exist_ok=True)
 
-    # Функция для загрузки всех задач домена из tasks.json
+    # Function to load all tasks for a domain from tasks.json
     def get_all_tasks_for_domain(domain_name: str) -> List[str]:
-        """Загрузить все задачи домена из tasks.json."""
-        # Проверяем несколько возможных путей (правильный путь первым)
+        """Load all tasks for a domain from tasks.json."""
+        # Check several possible paths (correct path first)
         possible_paths = [
             DATA_DIR
             / "duma"
             / "domains"
             / domain_name
-            / "tasks.json",  # Правильный путь
+            / "tasks.json",  # Correct path
             DATA_DIR / "domains" / domain_name / "tasks.json",
             Path("data/duma/domains") / domain_name / "tasks.json",
             Path(__file__).parent.parent
@@ -139,7 +139,7 @@ def run_all_experiments(
             traceback.print_exc()
             return []
 
-    # Кэш для задач доменов, чтобы не загружать их многократно
+    # Cache for domain tasks to avoid loading them repeatedly
     domain_tasks_cache = {}
 
     # In solo mode there is no user, so the temperature loop is irrelevant;
@@ -152,7 +152,7 @@ def run_all_experiments(
     for model in models:
         for user_temp in user_temperatures:
             for domain, tasks in domains.items():
-                # Если задачи не указаны, загрузить все задачи домена (с кэшированием)
+                # If no tasks specified, load all tasks for the domain (with caching)
                 if not tasks:
                     if domain not in domain_tasks_cache:
                         domain_tasks_cache[domain] = get_all_tasks_for_domain(domain)
@@ -161,28 +161,28 @@ def run_all_experiments(
                         print(f"Warning: No tasks found for domain {domain}, skipping")
                         continue
                     if model == models[0] and user_temp == user_temperatures[0]:
-                        # Показываем только при первой загрузке
+                        # Show only on first load
                         print(f"Loaded {len(tasks)} tasks for domain {domain}")
 
                 for task in tasks:
-                    # Формируем имя файла без расширения (duma добавит .json автоматически)
+                    # Build filename without extension (duma adds .json automatically)
                     model_id = _model_id_for_results(model)
 
                     if solo:
                         file_name = f"paper_results_solo_{domain}_{_sanitize_model_for_filename(model_id)}_T{agent_temperature}_{task}"
                     else:
-                        # Определяем модель пользователя
+                        # Determine user model
                         effective_user_llm = user_llm if user_llm else model
                         user_model_id = _model_id_for_results(effective_user_llm)
                         file_name = f"paper_results_{domain}_{_sanitize_model_for_filename(model_id)}_U{_sanitize_model_for_filename(user_model_id)}_UT{user_temp}_{task}"
 
-                    # Фактический путь к файлу результата
+                    # Actual path to the result file
                     output_file = actual_output_dir / f"{file_name}.json"
 
                     # --save-to path relative to simulations/ (includes run subdir)
                     save_to_name = f"{run_dir_name}/{file_name}" if run_dir_name else file_name
 
-                    # Формируем команду
+                    # Build command
                     use_local_models = not agent_base_url and not api_key_env
                     if solo:
                         cmd = [
@@ -231,7 +231,7 @@ def run_all_experiments(
                             "--max-concurrency",
                             str(duma_max_concurrency),
                         ]
-                    # Добавляем base URL и API key env если указаны
+                    # Add base URL and API key env if specified
                     if agent_base_url:
                         cmd += ["--agent-base-url", agent_base_url]
                         if not solo:
@@ -240,28 +240,27 @@ def run_all_experiments(
                         cmd += ["--api-key-env", api_key_env]
                     if use_local_models:
                         cmd += ["--local-models"]
-                    # Проверка: убедимся, что все аргументы - строки
+                    # Verify all arguments are strings
                     cmd = [str(arg) for arg in cmd]
                     commands.append((cmd, output_file))
 
     print(f"Total configurations to run: {len(commands)}")
 
-    # Запустить команды параллельно с прогрессом
+    # Run commands in parallel with progress
     completed = 0
     skipped = 0
     errors = 0
     start_time = time.time()
-    times = []  # Для расчета среднего времени
+    times = []  # For computing average time
 
-    # Использовать tqdm если доступен, иначе простой вывод
-    # Для thread-safe работы с tqdm используем lock
+    # Use tqdm if available, otherwise simple output
+    # Use lock for thread-safe tqdm updates
     from threading import Lock
 
     pbar_lock = Lock()
 
     if HAS_TQDM:
-        # Используем правильные параметры для обновления на месте
-        # mininterval и miniters для уменьшения частоты обновлений
+        # Use proper parameters for in-place updates
         pbar = tqdm(
             total=len(commands),
             desc="Running experiments",
@@ -276,32 +275,32 @@ def run_all_experiments(
     else:
         pbar = None
 
-    # Функция для выполнения одного эксперимента
+    # Function to execute a single experiment
     def run_single_experiment(idx_cmd_file):
         idx, cmd, output_file = idx_cmd_file
         exp_start_time = time.time()
         thread_id = threading.current_thread().ident
 
-        # Если файл существует и не требуется принудительный перезапуск, пропускаем
+        # If file exists and force rerun is not required, skip
         if output_file.exists() and not force_rerun:
             with pbar_lock:
                 if HAS_TQDM:
                     pbar.update(1)
             return (True, 0, "skipped", output_file.name)
 
-        # Если требуется принудительный перезапуск, удаляем существующий файл
+        # If force rerun is required, delete existing file
         if output_file.exists() and force_rerun:
             output_file.unlink()
 
-        # Показать текущий эксперимент
+        # Show current experiment
         model = cmd[cmd.index("--agent-llm") + 1] if "--agent-llm" in cmd else "unknown"
         domain = cmd[cmd.index("--domain") + 1] if "--domain" in cmd else "unknown"
         task = cmd[cmd.index("--task-ids") + 1] if "--task-ids" in cmd else "unknown"
         short_name = f"{domain[:15]}/{model[:10]}/{task.split('_')[-1][:20]}"
 
-        # Запустить команду
+        # Run command
         try:
-            # Логируем начало выполнения для отладки параллельности
+            # Log start for parallel execution debugging
             start_msg = f"[Thread-{thread_id % 10000}] [{idx}] START: {short_name}"
             print(start_msg, flush=True)
 
@@ -314,7 +313,7 @@ def run_all_experiments(
                 cwd=Path.cwd(),
             )
 
-            # Ждем завершения (это блокирует, но в разных потоках процессы выполняются параллельно)
+            # Wait for completion (this blocks, but processes run in parallel across threads)
             stdout, stderr = process.communicate()
             returncode = process.returncode
 
@@ -324,7 +323,7 @@ def run_all_experiments(
             exp_duration = time.time() - exp_start_time
 
             if returncode != 0:
-                # Собираем полное сообщение об ошибке
+                # Collect full error message
                 error_parts = []
                 if stderr:
                     error_parts.append(f"STDERR: {stderr}")
@@ -333,7 +332,7 @@ def run_all_experiments(
                 if not error_parts:
                     error_parts.append("No error message")
                 error_msg = "\n".join(error_parts)
-                # Для возврата используем короткую версию
+                # Use short version for return
                 error_msg_short = (
                     stderr[:500]
                     if stderr
@@ -358,9 +357,9 @@ def run_all_experiments(
                     pbar.update(1)
             return (False, exp_duration, str(e), short_name)
 
-    # Запустить команды параллельно
-    # Используем max_concurrency для ограничения параллельности
-    # Проверим, что duma доступен (только при первом запуске)
+    # Run commands in parallel
+    # Use max_concurrency to limit parallelism
+    # Check that duma is available (only on first run)
     if commands:
         duma_path = shutil.which("duma")
         if not duma_path:
@@ -369,7 +368,7 @@ def run_all_experiments(
                 "Make sure duma is installed: pip install -e ."
             )
 
-    # Подготовить данные для параллельного выполнения
+    # Prepare data for parallel execution
     indexed_commands = [
         (idx, cmd, output_file) for idx, (cmd, output_file) in enumerate(commands, 1)
     ]
@@ -380,14 +379,14 @@ def run_all_experiments(
     )
     print(f"   Total experiments: {len(indexed_commands)}")
 
-    # Очистить лог ошибок при старте (используем абсолютный путь)
+    # Clear error log at start (use absolute path)
     project_root = Path(__file__).parent.parent
     error_log_file = project_root / "experiment_errors.log"
     if error_log_file.exists():
         error_log_file.unlink()
 
     with ThreadPoolExecutor(max_workers=max_concurrency) as executor:
-        # Отправить все задачи сразу - они будут выполняться параллельно
+        # Submit all tasks at once - they will run in parallel
         future_to_item = {
             executor.submit(run_single_experiment, item): item
             for item in indexed_commands
@@ -396,13 +395,13 @@ def run_all_experiments(
         print(f"All {len(future_to_item)} tasks submitted to thread pool")
         print(f"   Executing up to {max_concurrency} experiments in parallel...\n")
 
-        # Обработать результаты по мере завершения
+        # Process results as they complete
         for future in as_completed(future_to_item):
             item = future_to_item[future]
             idx = item[0]
             try:
                 success, duration, error_msg, name = future.result()
-                if duration > 0:  # Не считаем пропущенные
+                if duration > 0:  # Don't count skipped
                     times.append(duration)
 
                 if success:
@@ -412,18 +411,18 @@ def run_all_experiments(
                         completed += 1
                 else:
                     errors += 1
-                    # Всегда логируем ошибки для диагностики
+                    # Always log errors for diagnostics
                     print(f"\n   ERROR [{idx}] after {duration:.1f}s: {name}")
                     if error_msg:
                         error_preview = (
                             error_msg[:500] if len(error_msg) > 500 else error_msg
                         )
                         print(f"   Error: {error_preview}")
-                        # Сохранить полную ошибку в файл для анализа (используем абсолютный путь)
+                        # Save full error to file for analysis (use absolute path)
                         project_root = Path(__file__).parent.parent
                         error_log_file = project_root / "experiment_errors.log"
                         try:
-                            # Получить команду из item
+                            # Get command from item
                             item_cmd = item[1] if len(item) > 1 else None
                             cmd_str = (
                                 " ".join(item_cmd) if item_cmd else "unknown command"
@@ -474,7 +473,7 @@ def run_all_experiments(
         print(f"   Average time per experiment: {avg_time:.1f}s")
     print(f"{'=' * 80}\n")
 
-    # Показать информацию о логе ошибок
+    # Show error log info
     project_root = Path(__file__).parent.parent
     error_log_file = project_root / "experiment_errors.log"
     if error_log_file.exists() and errors > 0:
@@ -487,11 +486,11 @@ def run_all_experiments(
 
 
 def main():
-    """Главная функция: запуск экспериментов."""
+    """Main function: run experiments."""
     import argparse
 
     parser = argparse.ArgumentParser(
-        description="Запуск экспериментов DUMA-Bench"
+        description="Run DUMA-Bench experiments"
     )
     parser.add_argument(
         "--models",
@@ -502,52 +501,52 @@ def main():
             "openai/gpt-5.1",
             "openai/gpt-5.2",
         ],
-        help="Модели агента для тестирования",
+        help="Agent models to test",
     )
     parser.add_argument(
         "--user-llm",
         type=str,
         default=None,
-        help="Модель для симуляции пользователя (по умолчанию: такая же как agent)",
+        help="Model for user simulation (default: same as agent)",
     )
     parser.add_argument(
         "--temperatures",
         nargs="+",
         type=float,
         default=[0.0, 0.5, 1.0],
-        help="Температуры пользовательской модели (по умолчанию: 0.0, 0.5, 1.0). В solo-режиме игнорируется.",
+        help="User model temperatures (default: 0.0, 0.5, 1.0). Ignored in solo mode.",
     )
     parser.add_argument(
         "--agent-temperature",
         type=float,
         default=0.0,
-        help="Фиксированная температура агента (по умолчанию: 0.0)",
+        help="Fixed agent temperature (default: 0.0)",
     )
     parser.add_argument(
         "--domains",
         nargs="+",
         default=["mail_rag_phishing", "collab", "output_handling"],
-        help="Домены для тестирования",
+        help="Domains to test",
     )
     parser.add_argument(
-        "--num-trials", type=int, default=10, help="Количество прогонов на конфигурацию"
+        "--num-trials", type=int, default=10, help="Number of runs per configuration"
     )
     parser.add_argument(
         "--max-concurrency",
         type=int,
         default=3,
-        help="Максимальное количество параллельных запусков экспериментов (процессов duma run)",
+        help="Maximum number of parallel experiment runs (duma run processes)",
     )
     parser.add_argument(
         "--duma-max-concurrency",
         type=int,
         default=1,
-        help="Внутренняя параллельность в каждом duma run (параллельные trials внутри одного эксперимента)",
+        help="Internal parallelism within each duma run (parallel trials within a single experiment)",
     )
     parser.add_argument(
         "--force-rerun",
         action="store_true",
-        help="Принудительно перезапустить все эксперименты (удалить существующие результаты)",
+        help="Force rerun all experiments (delete existing results)",
     )
     parser.add_argument(
         "--solo",
@@ -569,7 +568,7 @@ def main():
 
     args = parser.parse_args()
 
-    # Если домен не указан в tasks_by_domain, используем пустой список (загрузит все задачи)
+    # If domain is not in tasks_by_domain, use empty list (will load all tasks)
     domains_dict = {d: [] for d in args.domains}
 
     from duma.utils.utils import DATA_DIR
@@ -581,9 +580,9 @@ def main():
 
     print(f"Run directory: {results_dir}")
 
-    # Запустить эксперименты
+    # Run experiments
     print("=" * 80)
-    print("Запуск экспериментов")
+    print("Running experiments")
     print("=" * 80)
 
     # Save run config snapshot
@@ -625,7 +624,7 @@ def main():
     )
 
     print("\n" + "=" * 80)
-    print("ГОТОВО!")
+    print("DONE!")
     print(f"Results directory: {results_dir}")
     print("=" * 80)
 

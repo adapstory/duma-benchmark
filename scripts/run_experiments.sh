@@ -1,14 +1,14 @@
 #!/bin/bash
-# Скрипт для запуска экспериментов с активацией venv
+# Script to run experiments with venv activation
 
 cd "$(dirname "$0")/.."
 
-# Активировать venv если существует
+# Activate venv if it exists
 if [ -d ".venv" ]; then
     source .venv/bin/activate
 elif [ -d "venv" ]; then
     source venv/bin/activate
 fi
 
-# Запустить скрипт с переданными аргументами
+# Run the script with passed arguments
 python3 scripts/run_experiments_and_generate_tables.py "$@"

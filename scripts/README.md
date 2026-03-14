@@ -1,8 +1,8 @@
 # scripts/
 
-Минимальный набор полезных команд для работы с результатами в `data/simulations`.
+Minimal set of useful commands for working with results in `data/simulations`.
 
-## Быстро пересобрать paper (таблицы + графики + PDF)
+## Quickly rebuild paper (tables + plots + PDF)
 
 ```bash
 ./.venv/bin/python scripts/run_experiments_and_generate_tables.py \
@@ -14,12 +14,12 @@
   --results-dir data/simulations
 ```
 
-Выходные артефакты:
+Output artifacts:
 - `docs/paper_template/template.tex`, `docs/paper_template/template.pdf`
-- таблицы: `docs/paper_template/model_domain_table.tex`, `docs/paper_template/significance_table.tex`, `docs/paper_template/temperature_significance_table.tex`, `docs/paper_template/detailed_metrics_table.tex`
-- графики: `docs/paper_template/figs/*.pdf`
+- tables: `docs/paper_template/model_domain_table.tex`, `docs/paper_template/significance_table.tex`, `docs/paper_template/temperature_significance_table.tex`, `docs/paper_template/detailed_metrics_table.tex`
+- plots: `docs/paper_template/figs/*.pdf`
 
-## Запустить/дозапустить эксперименты (основной пайплайн)
+## Run / resume experiments (main pipeline)
 
 ```bash
 ./scripts/run_experiments.sh \
@@ -31,9 +31,9 @@
   --duma-max-concurrency 1
 ```
 
-## Дозапуск только недостающих результатов
+## Retry only missing results
 
-Если часть файлов в `data/simulations` неполная/отсутствует:
+If some files in `data/simulations` are incomplete/missing:
 
 ```bash
 ./.venv/bin/python scripts/retry_failed_experiments.py \
@@ -44,27 +44,27 @@
   --duma-max-concurrency 3
 ```
 
-## Максимальная загрузка (агрессивно)
+## Maximum load (aggressive)
 
-Авто-откат при rate limit / timeout.
+Auto-rollback on rate limit / timeout.
 
 ```bash
-export OPENAI_API_KEY=...  # или OPENROUTER_API_KEY (если настроен OpenRouter routing)
+export OPENAI_API_KEY=...  # or OPENROUTER_API_KEY (if OpenRouter routing is configured)
 ./scripts/max_load_retry.sh
 ```
 
-## Проверка корректности метрик
+## Verify metrics correctness
 
 ```bash
 ./.venv/bin/python scripts/test_all_metrics.py
 ```
 
-## Benchmark suite (если нужен общий запуск)
+## Benchmark suite (for a full run)
 
 ```bash
 ./.venv/bin/python scripts/run_benchmark_suite.py --config scripts/benchmark_config_example.json
 ```
 
-## Архив
+## Archive
 
-Нерелевантные/вспомогательные скрипты и ноутбуки перенесены в `scripts/_archive/`.
+Irrelevant/helper scripts and notebooks have been moved to `scripts/_archive/`.

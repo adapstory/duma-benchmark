@@ -46,10 +46,10 @@ def _normalize_model_name(model: str | None) -> str:
 def escape_latex(text: str) -> str:
     """
     Escape special LaTeX characters in text.
-    
+
     Args:
         text: Text to escape
-    
+
     Returns:
         Escaped text safe for LaTeX
     """
@@ -75,41 +75,41 @@ def format_continuous_metric_with_ci(
 ) -> str:
     """
     Format continuous metric with confidence interval for LaTeX tables.
-    
+
     Args:
         values: List of metric values
         metric_name: Name of the metric (for formatting)
         significance: Significance level to append
         precision: Number of decimal places
-    
+
     Returns:
         Formatted string like "0.85 [CI: 0.72--0.98]*"
     """
     if len(values) == 0:
         return "N/A"
-    
+
     mean = float(np.mean(values))
     ci_lower, ci_upper = t_confidence_interval(values)
-    
+
     # Format based on metric type
     if 'cost' in metric_name.lower():
-        # Costs in dollars - экранируем $ для LaTeX, используем меньше знаков после запятой
+        # Costs in dollars - escape $ for LaTeX, use fewer decimal places
         mean_str = f"\\${mean:.{min(precision, 2)}f}"
         ci_str = f"\\${ci_lower:.{min(precision, 2)}f}--\\${ci_upper:.{min(precision, 2)}f}"
     elif 'duration' in metric_name.lower():
-        # Duration in seconds - округляем до целых
+        # Duration in seconds - round to integers
         mean_str = f"{mean:.0f}s"
         ci_str = f"{ci_lower:.0f}--{ci_upper:.0f}s"
     else:
-        # General metric - используем меньше знаков
+        # General metric - use fewer decimal places
         mean_str = f"{mean:.{min(precision, 2)}f}"
         ci_str = f"{ci_lower:.{min(precision, 2)}f}--{ci_upper:.{min(precision, 2)}f}"
-    
-    # Более компактный формат: убираем "CI:" и используем короткий формат
+
+    # Compact format: omit "CI:" and use short format
     result = f"{mean_str} [{ci_str}]"
     if significance:
         result += significance
-    
+
     return result
 
 
@@ -120,39 +120,39 @@ def format_asr_with_ci(
 ) -> str:
     """
     Format ASR (Attack Success Rate) with confidence interval.
-    
+
     Args:
         successes: Number of failures (trials - successes)
         trials: Total number of trials
         significance: Significance level to append
-    
+
     Returns:
-        Formatted string like "50\\% [CI: 18\\%--82\\%]*" (экранированные % для LaTeX)
+        Formatted string like "50\\% [CI: 18\\%--82\\%]*" (escaped % for LaTeX)
     """
     if trials == 0:
         return "N/A"
-    
+
     failures = trials - successes
     asr = failures / trials
     # ASR CI is 1 - pass@1 CI (inverted)
     pass1_ci_lower, pass1_ci_upper = wilson_confidence_interval(successes, trials)
     asr_ci_lower = 1 - pass1_ci_upper
     asr_ci_upper = 1 - pass1_ci_lower
-    
+
     asr_pct = f"{asr:.0%}" if asr < 0.01 or asr > 0.99 else f"{asr:.1%}"
     ci_lower_pct = f"{asr_ci_lower:.0%}" if asr_ci_lower < 0.01 or asr_ci_lower > 0.99 else f"{asr_ci_lower:.1%}"
     ci_upper_pct = f"{asr_ci_upper:.0%}" if asr_ci_upper < 0.01 or asr_ci_upper > 0.99 else f"{asr_ci_upper:.1%}"
-    
-    # Экранировать % для LaTeX
+
+    # Escape % for LaTeX
     asr_pct = asr_pct.replace('%', '\\%')
     ci_lower_pct = ci_lower_pct.replace('%', '\\%')
     ci_upper_pct = ci_upper_pct.replace('%', '\\%')
-    
-    # Более компактный формат: убираем "CI:" для экономии места
+
+    # Compact format: omit "CI:" to save space
     result = f"{asr_pct} [{ci_lower_pct}--{ci_upper_pct}]"
     if significance:
         result += significance
-    
+
     return result
 
 
@@ -164,13 +164,13 @@ def compute_domain_stats(
 ) -> Dict:
     """
     Compute aggregated statistics for a domain.
-    
+
     Args:
         result_files: List of result file paths
         domain: Domain name
         reference_model: Reference model for comparison
         reference_temp: Reference temperature for comparison
-    
+
     Returns:
         Dictionary with aggregated metrics and raw values for statistical tests
     """
@@ -186,10 +186,10 @@ def compute_domain_stats(
         except Exception as e:
             print(f"Warning: Failed to load {file_path}: {e}")
             continue
-    
+
     if not domain_results:
         return {}
-    
+
     # Aggregate metrics across all tasks and configurations
     all_pass1_values = []
     all_asr_values = []
@@ -198,7 +198,7 @@ def compute_domain_stats(
     all_user_costs = []
     all_durations = []
     all_num_messages = []
-    
+
     # Store raw values for statistical tests
     reference_pass1_successes = 0
     reference_pass1_trials = 0
@@ -207,7 +207,7 @@ def compute_domain_stats(
     reference_user_costs = []
     reference_durations = []
     reference_num_messages = []
-    
+
     # Process each result
     for results in domain_results:
         model = _normalize_model_name(results.info.agent_info.llm)
@@ -216,54 +216,54 @@ def compute_domain_stats(
             if results.info.agent_info.llm_args
             else 0.0
         )
-        
+
         task_ids = set(sim.task_id for sim in results.simulations)
-        
+
         for task_id in task_ids:
             metrics = compute_task_metrics(results, task_id)
             if not metrics:
                 continue
-            
+
             # Check if this is the reference configuration
             is_reference = (model == reference_model and temp == reference_temp)
-            
+
             # Collect metrics
             if 'pass^1' in metrics:
                 all_pass1_values.append(metrics['pass^1'])
                 all_asr_values.append(metrics.get('ASR', 1.0 - metrics['pass^1']))
-                
+
                 if is_reference:
                     reference_pass1_successes += metrics.get('success_count', 0)
                     reference_pass1_trials += metrics.get('num_trials', 0)
-            
+
             if 'avg_reward' in metrics:
                 all_rewards.append(metrics['avg_reward'])
                 if is_reference:
                     # Get raw reward values
                     task_sims = [s for s in results.simulations if s.task_id == task_id]
                     reference_rewards.extend([
-                        s.reward_info.reward if s.reward_info else 0.0 
+                        s.reward_info.reward if s.reward_info else 0.0
                         for s in task_sims
                     ])
-            
+
             if metrics.get('avg_agent_cost') is not None:
                 all_agent_costs.append(metrics['avg_agent_cost'])
                 if is_reference:
                     task_sims = [s for s in results.simulations if s.task_id == task_id]
                     reference_agent_costs.extend([
-                        s.agent_cost if s.agent_cost else 0.0 
+                        s.agent_cost if s.agent_cost else 0.0
                         for s in task_sims
                     ])
-            
+
             if metrics.get('avg_user_cost') is not None:
                 all_user_costs.append(metrics['avg_user_cost'])
                 if is_reference:
                     task_sims = [s for s in results.simulations if s.task_id == task_id]
                     reference_user_costs.extend([
-                        s.user_cost if s.user_cost else 0.0 
+                        s.user_cost if s.user_cost else 0.0
                         for s in task_sims
                     ])
-            
+
             if 'avg_duration' in metrics:
                 all_durations.append(metrics['avg_duration'])
                 if is_reference:
@@ -271,7 +271,7 @@ def compute_domain_stats(
                     reference_durations.extend([
                         s.duration for s in task_sims
                     ])
-            
+
             if 'avg_num_messages' in metrics:
                 all_num_messages.append(metrics['avg_num_messages'])
                 if is_reference:
@@ -279,7 +279,7 @@ def compute_domain_stats(
                     reference_num_messages.extend([
                         len(s.messages) for s in task_sims
                     ])
-    
+
     # Compute aggregated statistics
     stats = {
         'domain': domain,
@@ -299,7 +299,7 @@ def compute_domain_stats(
         'reference_durations': reference_durations,
         'reference_num_messages': reference_num_messages,
     }
-    
+
     return stats
 
 
@@ -310,18 +310,18 @@ def compare_with_reference(
 ) -> Tuple[float, str]:
     """
     Compare current values with reference using appropriate statistical test.
-    
+
     Args:
         current_values: Current metric values
         reference_values: Reference metric values
         metric_type: 'continuous' or 'discrete'
-    
+
     Returns:
         Tuple of (p-value, significance_level)
     """
     if len(current_values) == 0 or len(reference_values) == 0:
         return (1.0, '')
-    
+
     if metric_type == 'discrete':
         # For discrete metrics, values should be [successes, trials] pairs
         if len(current_values) == 2 and len(reference_values) == 2:
@@ -332,7 +332,7 @@ def compare_with_reference(
     else:
         # Continuous metrics
         return compare_continuous_metrics(current_values, reference_values)
-    
+
     return (1.0, '')
 
 
@@ -469,39 +469,39 @@ def generate_detailed_metrics_table_latex(
                     'avg_duration': duration_str,
                     'avg_num_messages': num_messages_str,
                 })
-    
+
     # Generate LaTeX table
-    # Используем более компактные колонки и landscape для широкой таблицы
-    # Уменьшаем шрифт и ширину колонок для лучшего размещения
-    # 12 колонок: домен, модель, T, кейс, pass@1, pass@2, pass@3, pass@4, ASR, reward, duration, msgs
+    # Use compact columns and landscape for a wide table
+    # Reduce font size and column widths for better fit
+    # 12 columns: domain, model, T, case, pass@1, pass@2, pass@3, pass@4, ASR, reward, duration, msgs
     latex_lines = [
         "\\begin{landscape}",
         "\\scriptsize",
         "\\setlength{\\tabcolsep}{2pt}",
         "\\renewcommand{\\arraystretch}{1.1}",
         "\\begin{longtable}{p{1.8cm}p{1.2cm}p{0.4cm}p{2.0cm}p{2.2cm}p{0.8cm}p{0.8cm}p{0.8cm}p{1.8cm}p{1.5cm}p{1.3cm}p{1.0cm}}",
-        "\\caption{Детальные метрики по кейсам} \\label{tab:detailed_metrics} \\\\",
+        "\\caption{Detailed per-case metrics} \\label{tab:detailed_metrics} \\\\",
         "\\toprule",
-        "\\shortstack{\\textbf{Домен}} & \\shortstack{\\textbf{Модель}} & \\textbf{T} & \\textbf{Кейс} & \\textbf{pass@1} & \\textbf{p@2} & \\textbf{p@3} & \\textbf{p@4} & \\textbf{ASR} & \\shortstack{\\textbf{avg}\\\\\\textbf{reward}} & \\shortstack{\\textbf{dur}\\\\\\textbf{(s)}} & \\shortstack{\\textbf{num}\\\\\\textbf{msg}} \\\\",
+        "\\shortstack{\\textbf{Domain}} & \\shortstack{\\textbf{Model}} & \\textbf{T} & \\textbf{Case} & \\textbf{pass@1} & \\textbf{p@2} & \\textbf{p@3} & \\textbf{p@4} & \\textbf{ASR} & \\shortstack{\\textbf{avg}\\\\\\textbf{reward}} & \\shortstack{\\textbf{dur}\\\\\\textbf{(s)}} & \\shortstack{\\textbf{num}\\\\\\textbf{msg}} \\\\",
         "\\midrule",
         "\\endfirsthead",
-        "\\multicolumn{12}{c}{\\tablename\\ \\thetable{} -- продолжение} \\\\",
+        "\\multicolumn{12}{c}{\\tablename\\ \\thetable{} -- continued} \\\\",
         "\\toprule",
-        "\\shortstack{\\textbf{Домен}} & \\shortstack{\\textbf{Модель}} & \\textbf{T} & \\textbf{Кейс} & \\textbf{pass@1} & \\textbf{p@2} & \\textbf{p@3} & \\textbf{p@4} & \\textbf{ASR} & \\shortstack{\\textbf{avg}\\\\\\textbf{reward}} & \\shortstack{\\textbf{dur}\\\\\\textbf{(s)}} & \\shortstack{\\textbf{num}\\\\\\textbf{msg}} \\\\",
+        "\\shortstack{\\textbf{Domain}} & \\shortstack{\\textbf{Model}} & \\textbf{T} & \\textbf{Case} & \\textbf{pass@1} & \\textbf{p@2} & \\textbf{p@3} & \\textbf{p@4} & \\textbf{ASR} & \\shortstack{\\textbf{avg}\\\\\\textbf{reward}} & \\shortstack{\\textbf{dur}\\\\\\textbf{(s)}} & \\shortstack{\\textbf{num}\\\\\\textbf{msg}} \\\\",
         "\\midrule",
         "\\endhead",
         "\\midrule",
-        "\\multicolumn{12}{r}{Продолжение на следующей странице} \\\\",
+        "\\multicolumn{12}{r}{Continued on next page} \\\\",
         "\\endfoot",
         "\\bottomrule",
         "\\endlastfoot",
     ]
 
     for row in rows:
-        # Экранировать все текстовые поля
+        # Escape all text fields
         domain_escaped = escape_latex(_short_domain_label(row['domain']))
         model_escaped = escape_latex(_short_model_label(row['model']))
-        # Сократить имя кейса: последние 2 сегмента (меньше коллизий чем просто 'trigger').
+        # Shorten case name: last 2 segments (fewer collisions than just 'trigger').
         task_name = row['task']
         parts = task_name.split('_') if '_' in task_name else [task_name]
         task_short = '_'.join(parts[-2:]) if len(parts) >= 2 else task_name
@@ -515,18 +515,17 @@ def generate_detailed_metrics_table_latex(
         else:
             task_escaped = escape_latex(task_short)
 
-        # Экранировать значения метрик, которые могут содержать спецсимволы
-        # Но не экранируем уже отформатированные строки с CI, так как они уже содержат правильное форматирование
-        pass1_val = row['pass1']  # Уже отформатировано с escape
-        pass2_val = row['pass2']  # Уже отформатировано
-        pass3_val = row['pass3']  # Уже отформатировано
-        pass4_val = row['pass4']  # Уже отформатировано
-        asr_val = row['asr']  # Уже отформатировано
-        avg_reward_val = row['avg_reward']  # Уже отформатировано
-        avg_duration_val = row['avg_duration']  # Уже отформатировано
-        avg_num_messages_val = row['avg_num_messages']  # Уже отформатировано
+        # Metric values are already formatted with escape where needed
+        pass1_val = row['pass1']
+        pass2_val = row['pass2']
+        pass3_val = row['pass3']
+        pass4_val = row['pass4']
+        asr_val = row['asr']
+        avg_reward_val = row['avg_reward']
+        avg_duration_val = row['avg_duration']
+        avg_num_messages_val = row['avg_num_messages']
 
-        # Проверим, что все значения не пустые
+        # Verify all values are non-empty
         if not all([
             domain_escaped,
             model_escaped,
@@ -548,18 +547,18 @@ def generate_detailed_metrics_table_latex(
             f"{avg_duration_val} & {avg_num_messages_val} \\\\"
         )
 
-    
+
     latex_lines.append("\\end{longtable}")
-    latex_lines.append("\\normalsize",)  # Возвращаем нормальный размер шрифта
+    latex_lines.append("\\normalsize",)  # Restore normal font size
     latex_lines.append("\\end{landscape}")
-    
+
     latex_code = "\n".join(latex_lines)
-    
+
     if output_path:
         output_path.parent.mkdir(parents=True, exist_ok=True)
         output_path.write_text(latex_code)
         print(f"Detailed metrics table saved to {output_path}")
-    
+
     return latex_code
 
 
@@ -570,12 +569,12 @@ def generate_aggregated_table_latex(
 ) -> str:
     """
     Generate LaTeX table with aggregated metrics by domain.
-    
+
     Args:
         result_files: List of result file paths
         domains: List of domain names
         output_path: Optional path to save the table
-    
+
     Returns:
         LaTeX table code as string
     """
@@ -585,25 +584,25 @@ def generate_aggregated_table_latex(
         stats = compute_domain_stats(result_files, domain)
         if stats:
             domain_stats_list.append(stats)
-    
+
     if not domain_stats_list:
         return ""
-    
+
     # Generate LaTeX table
     latex_lines = [
         "\\begin{table}[htbp]",
         "\\centering",
-        "\\caption{Агрегированные метрики по доменам (смешанные конфигурации)}",
+        "\\caption{Aggregated metrics by domain (mixed configurations)}",
         "\\label{tab:aggregated_domains}",
         "\\begin{tabular}{lccccccc}",
         "\\toprule",
-        "\\textbf{Домен} & \\textbf{pass@1} & \\textbf{ASR} & \\textbf{avg\\_reward} & \\textbf{avg\\_agent\\_cost} & \\textbf{avg\\_user\\_cost} & \\textbf{avg\\_duration} & \\textbf{avg\\_num\\_messages} \\\\",
+        "\\textbf{Domain} & \\textbf{pass@1} & \\textbf{ASR} & \\textbf{avg\\_reward} & \\textbf{avg\\_agent\\_cost} & \\textbf{avg\\_user\\_cost} & \\textbf{avg\\_duration} & \\textbf{avg\\_num\\_messages} \\\\",
         "\\midrule",
     ]
-    
-    # Функция для экранирования LaTeX специальных символов
-    def escape_latex(text: str) -> str:
-        """Экранировать специальные символы LaTeX."""
+
+    # Function to escape LaTeX special characters
+    def escape_latex_inner(text: str) -> str:
+        """Escape special LaTeX characters."""
         if not isinstance(text, str):
             text = str(text)
         text = text.replace('_', '\\_')
@@ -617,9 +616,9 @@ def generate_aggregated_table_latex(
         text = text.replace('~', '\\textasciitilde{}')
         return text
 
-    
+
     for stats in domain_stats_list:
-        domain = escape_latex(stats['domain'])
+        domain = escape_latex_inner(stats['domain'])
         pass1 = f"{stats['pass1_mean']:.2f}"
         asr = f"{stats['asr_mean']:.2f}"
         reward = f"{stats['avg_reward_mean']:.2f}"
@@ -635,24 +634,24 @@ def generate_aggregated_table_latex(
         )
         duration = f"{stats['avg_duration_mean']:.2f}s"
         num_messages = f"{stats['avg_num_messages_mean']:.1f}"
-        
+
         latex_lines.append(
             f"{domain} & {pass1} & {asr} & {reward} & {agent_cost} & {user_cost} & {duration} & {num_messages} \\\\"
         )
-    
+
     latex_lines.extend([
         "\\bottomrule",
         "\\end{tabular}",
         "\\end{table}",
     ])
-    
+
     latex_code = "\n".join(latex_lines)
-    
+
     if output_path:
         output_path.parent.mkdir(parents=True, exist_ok=True)
         output_path.write_text(latex_code)
         print(f"Aggregated table saved to {output_path}")
-    
+
     return latex_code
 
 
@@ -784,7 +783,7 @@ def generate_model_domain_table_latex(
     temperatures: List[float],
     output_path: Optional[Path] = None,
 ) -> str:
-    """Generate model×domain pass@k table (aggregated across tasks)."""
+    """Generate model x domain pass@k table (aggregated across tasks)."""
 
     # Build table with pass@1, pass@2, pass@3, pass@4 for each domain
     # Each domain has 4 columns (p@1, p@2, p@3, p@4)
@@ -797,7 +796,7 @@ def generate_model_domain_table_latex(
         "\\scriptsize",
         "\\setlength{\\tabcolsep}{2pt}",
         "\\renewcommand{\\arraystretch}{1.1}",
-        "\\caption{Сравнение устойчивости моделей по доменам (pass@k, \\%)}",
+        "\\caption{Model robustness comparison by domain (pass@k, \\%)}",
         "\\label{tab:aggregated}",
     ]
 
@@ -808,7 +807,7 @@ def generate_model_domain_table_latex(
 
     # Multi-row header
     # First row: Model | Domain1 (spanning 4 cols) | Domain2 (spanning 4 cols) | ...
-    header_row1 = "\\textbf{Модель}"
+    header_row1 = "\\textbf{Model}"
     for domain in domains:
         domain_escaped = escape_latex(_short_domain_label(domain))
         header_row1 += f" & \\multicolumn{{{len(k_values)}}}{{c}}{{\\textbf{{{domain_escaped}}}}}"
@@ -892,11 +891,11 @@ def generate_significance_table_latex(
         "\\scriptsize",
         "\\setlength{\\tabcolsep}{3pt}",
         "\\renewcommand{\\arraystretch}{1.1}",
-        "\\caption{Статистическая значимость различий (Fisher exact, двусторонний; p относится к pass@1 и ASR)}",
+        "\\caption{Statistical significance of differences (Fisher exact, two-sided; p refers to pass@1 and ASR)}",
         "\\label{tab:significance}",
         "\\begin{tabular}{llccccc}",
         "\\toprule",
-        "\\textbf{Домен} & \\textbf{T} & "
+        "\\textbf{Domain} & \\textbf{T} & "
         "\\shortstack{\\textbf{4o}\\\\\\textbf{pass@1}} & "
         "\\shortstack{\\textbf{4o-mini}\\\\\\textbf{pass@1}} & "
         "\\shortstack{\\textbf{4o}\\\\\\textbf{ASR}} & "
@@ -990,11 +989,11 @@ def generate_temperature_significance_table_latex(
         "\\scriptsize",
         "\\setlength{\\tabcolsep}{3pt}",
         "\\renewcommand{\\arraystretch}{1.1}",
-        "\\caption{Влияние температуры пользователя: p-value попарных сравнений (Fisher exact; p относится к pass@1 и ASR)}",
+        "\\caption{User temperature effect: pairwise p-values (Fisher exact; p refers to pass@1 and ASR)}",
         "\\label{tab:temp_significance}",
         "\\begin{tabular}{ll" + "c" * len(pairs) + "}",
         "\\toprule",
-        "\\textbf{Домен} & \\textbf{Модель} & " + header_cols + " \\\\",
+        "\\textbf{Domain} & \\textbf{Model} & " + header_cols + " \\\\",
         "\\midrule",
     ]
 
@@ -1039,7 +1038,7 @@ def generate_temperature_significance_table_latex(
 def main():
     """Main function for command-line usage."""
     import argparse
-    
+
     parser = argparse.ArgumentParser(description="Generate LaTeX tables from simulation results")
     parser.add_argument("result_files", nargs="+", type=Path, help="Paths to simulation result files")
     parser.add_argument("--domains", nargs="+", default=["mail_rag_phishing", "collab", "output_handling"],
@@ -1048,18 +1047,18 @@ def main():
                        help="Type of table to generate")
     parser.add_argument("--output-dir", type=Path, default=Path("docs/paper_template"),
                        help="Output directory for LaTeX tables")
-    
+
     args = parser.parse_args()
-    
+
     # Generate tables
     if args.table_type in ["detailed", "both"]:
         detailed_path = args.output_dir / "detailed_metrics_table.tex"
         generate_detailed_metrics_table_latex(args.result_files, args.domains, detailed_path)
-    
+
     if args.table_type in ["aggregated", "both"]:
         aggregated_path = args.output_dir / "aggregated_table.tex"
         generate_aggregated_table_latex(args.result_files, args.domains, aggregated_path)
-    
+
     print("Table generation complete!")
 
 

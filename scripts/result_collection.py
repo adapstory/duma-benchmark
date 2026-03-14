@@ -41,13 +41,13 @@ def load_simulation_file(file_path: str | Path) -> Dict[str, Results]:
     # Try to load as MultiDomainResults first
     try:
         multi_domain_results = MultiDomainResults.load(file_path)
-        # Если domains не пустой, вернуть его
+        # If domains is not empty, return it
         if multi_domain_results.domains:
             return multi_domain_results.domains
-        # Если domains пустой, значит это был обычный Results, сохраненный в формате MultiDomainResults
-        # Попробуем загрузить как обычный Results
+        # If domains is empty, it was a regular Results saved in MultiDomainResults format
+        # Try loading as regular Results
     except Exception:
-        pass  # Продолжим попытку загрузки как Results
+        pass  # Continue trying to load as Results
     
     # Fall back to single-domain Results format
     try:
@@ -510,7 +510,7 @@ def format_pass_k_with_ci(
         significance: Significance level to append
     
     Returns:
-        Formatted string like "3/6 (50\\%) [CI: 18\\%--82\\%]***" (экранированные % для LaTeX)
+        Formatted string like "3/6 (50\\%) [CI: 18\\%--82\\%]***" (escaped % for LaTeX)
     """
     if trials == 0:
         return "0/0 (0\\%)"
@@ -526,12 +526,12 @@ def format_pass_k_with_ci(
     ci_lower_pct = f"{ci_lower:.0%}" if ci_lower < 0.01 or ci_lower > 0.99 else f"{ci_lower:.1%}"
     ci_upper_pct = f"{ci_upper:.0%}" if ci_upper < 0.01 or ci_upper > 0.99 else f"{ci_upper:.1%}"
     
-    # Экранировать % для LaTeX
+    # Escape % for LaTeX
     pct_str = pct_str.replace('%', '\\%')
     ci_lower_pct = ci_lower_pct.replace('%', '\\%')
     ci_upper_pct = ci_upper_pct.replace('%', '\\%')
     
-    # Более компактный формат: убираем "CI:" для экономии места
+    # Compact format: omit "CI:" to save space
     result = f"{successes}/{trials} ({pct_str}) [{ci_lower_pct}--{ci_upper_pct}]"
     if significance:
         result += significance
