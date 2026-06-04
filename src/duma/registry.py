@@ -24,6 +24,12 @@ from duma.domains.mail_rag_phishing.environment import (
 from duma.domains.mail_rag_phishing.environment import (
     get_tasks as mail_rag_phishing_domain_get_tasks,
 )
+from duma.domains.memory_whitebox.environment import (
+    get_environment as memory_whitebox_get_environment,
+)
+from duma.domains.memory_whitebox.environment import (
+    get_tasks as memory_whitebox_get_tasks,
+)
 from duma.domains.infra_loadshed.environment import (
     get_environment as infra_loadshed_get_environment,
 )
@@ -208,6 +214,8 @@ try:
     registry.register_tasks(mktg_phishing_get_tasks, "mktg_phishing")
     registry.register_domain(tool_shadow_poison_get_environment, "tool_shadow_poison")
     registry.register_tasks(tool_shadow_poison_get_tasks, "tool_shadow_poison")
+    registry.register_domain(memory_whitebox_get_environment, "memory_whitebox")
+    registry.register_tasks(memory_whitebox_get_tasks, "memory_whitebox")
     logger.debug(
         f"Default components registered successfully. Registry info: {json.dumps(registry.get_info().model_dump(), indent=2)}"
     )

@@ -1,0 +1,6 @@
+from duma.utils.utils import DATA_DIR
+
+MEMORY_WHITEBOX_DATA_DIR = DATA_DIR / "duma" / "domains" / "memory_whitebox"
+MEMORY_WHITEBOX_DB_PATH = MEMORY_WHITEBOX_DATA_DIR / "db.json"
+MEMORY_WHITEBOX_POLICY_PATH = MEMORY_WHITEBOX_DATA_DIR / "policy.md"
+MEMORY_WHITEBOX_TASK_SET_PATH = MEMORY_WHITEBOX_DATA_DIR / "tasks.json"
